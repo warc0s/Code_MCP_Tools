@@ -83,6 +83,7 @@ def build_app(toolset: RAGToolset) -> FastAPI:
         if not isinstance(payload, dict):
             return _json_rpc_error(None, -32600, "La petición JSON-RPC debe ser un objeto.")
 
+        logger.debug("Payload JSON-RPC recibido: %s", payload)
         request_id = payload.get("id")
         method = payload.get("method")
         params = payload.get("params") or {}
@@ -113,9 +114,18 @@ def build_app(toolset: RAGToolset) -> FastAPI:
                         "name": name,
                         "description": spec["description"],
                         "inputSchema": spec["schema"],
+                        **({"outputSchema": spec["output_schema"]} if "output_schema" in spec else {}),
+                        **({"title": spec["title"]} if "title" in spec else {}),
                     }
                 )
             return _json_rpc_result(request_id, {"tools": tools})
+
+        if method == "logging/setLevel":
+            level_name = (params or {}).get("level", "INFO")
+            numeric_level = getattr(logging, str(level_name).upper(), logging.INFO)
+            logging.getLogger().setLevel(numeric_level)
+            logger.info("Nivel de logging ajustado a %s (%s)", level_name, numeric_level)
+            return _json_rpc_result(request_id, {})
 
         if method == "tools/call":
             tool_name = params.get("name")
@@ -140,12 +150,14 @@ def build_app(toolset: RAGToolset) -> FastAPI:
             )
             result_payload: Dict[str, object] = {
                 "content": [
-                    {"type": "json", "json": {"results": results}},
-                    {"type": "text", "text": json.dumps(results, ensure_ascii=False)},
+                    {
+                        "type": "text",
+                        "text": json.dumps({"results": results}, ensure_ascii=False),
+                    }
                 ],
-                "isError": False,
+                "structuredContent": {"results": results},
             }
-            result_payload["toolCallId"] = tool_call_id
+            result_payload["_meta"] = {"toolCallId": tool_call_id}
             logger.debug("Payload de respuesta JSON-RPC: %s", result_payload)
             return _json_rpc_result(request_id, result_payload)
 

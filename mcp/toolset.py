@@ -10,6 +10,51 @@ from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+SEARCH_RESULT_ITEM_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "chunk_id": {"type": "string"},
+        "doc_id": {"type": "string"},
+        "url": {"type": "string"},
+        "title": {"type": "string"},
+        "section_path": {"type": "string"},
+        "position": {"type": "integer"},
+        "text": {"type": "string"},
+        "score": {"type": "number"},
+    },
+    "required": ["chunk_id", "doc_id", "url", "text", "score"],
+}
+
+CHUNK_RESULT_ITEM_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "chunk_id": {"type": "string"},
+        "doc_id": {"type": "string"},
+        "url": {"type": "string"},
+        "title": {"type": "string"},
+        "section_path": {"type": "string"},
+        "position": {"type": "integer"},
+        "text": {"type": "string"},
+    },
+    "required": ["chunk_id", "doc_id", "url", "text"],
+}
+
+SEARCH_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {"type": "array", "items": SEARCH_RESULT_ITEM_SCHEMA},
+    },
+    "required": ["results"],
+}
+
+CHUNK_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {"type": "array", "items": CHUNK_RESULT_ITEM_SCHEMA},
+    },
+    "required": ["results"],
+}
+
 
 class RAGToolset:
     def __init__(self, retriever, force_english_queries: bool = True):
@@ -17,6 +62,7 @@ class RAGToolset:
         self.force_english_queries = force_english_queries
         self._tools: Dict[str, Dict[str, Any]] = {
             "dense_search": {
+                "title": "Dense search",
                 "description": "Dense vector search using cosine similarity over the embedding index.",
                 "schema": {
                     "type": "object",
@@ -26,8 +72,10 @@ class RAGToolset:
                     },
                     "required": ["query"],
                 },
+                "output_schema": SEARCH_OUTPUT_SCHEMA,
             },
             "lexical_search": {
+                "title": "Lexical search",
                 "description": "Lexical BM25 search using DuckDB FTS.",
                 "schema": {
                     "type": "object",
@@ -37,8 +85,10 @@ class RAGToolset:
                     },
                     "required": ["query"],
                 },
+                "output_schema": SEARCH_OUTPUT_SCHEMA,
             },
             "hybrid_search": {
+                "title": "Hybrid search",
                 "description": "Hybrid dense+lexical search with score fusion, MMR and optional reranking.",
                 "schema": {
                     "type": "object",
@@ -48,8 +98,10 @@ class RAGToolset:
                     },
                     "required": ["query"],
                 },
+                "output_schema": SEARCH_OUTPUT_SCHEMA,
             },
             "chunks_by_url": {
+                "title": "Chunks by URL",
                 "description": "Retrieve every chunk extracted from a given documentation URL.",
                 "schema": {
                     "type": "object",
@@ -58,6 +110,7 @@ class RAGToolset:
                     },
                     "required": ["url"],
                 },
+                "output_schema": CHUNK_OUTPUT_SCHEMA,
             },
         }
 

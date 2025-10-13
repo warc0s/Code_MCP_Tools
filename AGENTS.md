@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Flujo de trabajo
-- Antes de aplicar cualquier cambio, revisa o crea pruebas unitarias en `tests/`, ejecútalas y asegúrate de que finalicen en verde cubriendo los edge cases relevantes.
+- Antes de aplicar cualquier cambio, revisa el contexto relacionado y verifica manualmente los flujos afectados para detectar regresiones.
 
 ## Engineering Principles
 - **Work doggedly.** Mantén autonomía mientras haya progreso; si paras, explica por qué.
@@ -22,10 +22,10 @@
 
 ## Normas y recordatorios finales
 - Respondes siempre en español
-- Estas en un entorno conda asi que deberias ser capaz de ejecutar la aplicacion o hacer pruebas sin problemas. Si añades un nuevo import que deba usar la aplicacion, puedes instalarlo pero recuerda añadirlo al requirements.txt. Si ves que faltan demasiados paquetes, igual el usuario se olvido de activar el entorno conda antes de llamarte, puedes preguntarle en dicho caso
+- Estas en un entorno conda asi que deberias ser capaz de ejecutar la aplicacion sin problemas. Si añades un nuevo import que deba usar la aplicacion, puedes instalarlo pero recuerda añadirlo al requirements.txt. Si ves que faltan demasiados paquetes, igual el usuario se olvido de activar el entorno conda antes de llamarte, puedes preguntarle en dicho caso
 - Crea o edita las guias actuales (Extra/Guias/...), o bien genera nuevas si es algo demasiado diferente, con cada cambio que implementes que consideres digno de anotar
 - Antes de empezar cualquier tarea, recopila toda la información disponible sobre el repositorio: revisa, lee **todas** las guías de `Extra/Guias/`, inspecciona los archivos relevantes y confirma el estado actual antes de proponer o ejecutar cambios.
-- Itera siempre guiandote por las pruebas ejecutadas y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
+- Itera siempre guiandote por las validaciones manuales y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
 - Una vez finalices la tarea que te ha encargado el usuario y se haya comprobado que es estable y valida, preguntale al usuario si debes hacer "git add ." y commit con un comentario aclaratorio de lo añadido. Tu jamás harás push, el usuario lo hace, solo debes add y commit. SIEMPRE ESPERANDO APROBACION DEL USUARIO.
 - A la hora de añadir nuevas funciones y demas en 'utils', implementalas en el .py que consideres mas adecuado O BIEN escribe uno nuevo si ninguno se amolda a lo que vas a programar.
 - Nunca te identifiques como responsable ni menciones nombres de agentes (p.ej., Codex); enfócate en describir acciones y resultados.

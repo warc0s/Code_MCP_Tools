@@ -42,11 +42,6 @@
 3. Reinicia Codex CLI y valida la conexión con `codex mcp list` o `codex mcp get rag_local`.
 4. Ajusta `url`, `startup_timeout_sec` o `tool_timeout_sec` si cambias host/puerto o necesitas tolerancia extra.
 
-## Pruebas
-- `pytest` cubre que `lexical_search` usa `MATCH` + `bm25` y que híbrida normaliza/MMR/penaliza.
-- También valida que las tools devuelven metadatos mínimos.
-- Ejecuta `python -m pytest` tras cambios. `pytest` está en el entorno (añadido vía pip).
-
 ## Notas operativas
 - Se fuerza `DUCKDB_EXTENSION_DIRECTORY` a `.duckdb/extensions` para guardar FTS/VSS sin permisos root.
 - Si faltan extensiones, DuckDB pedirá descargar una vez con red.
@@ -54,14 +49,19 @@
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
 - `requirements.txt` cubre solo las dependencias necesarias en CPU (`torch`, `sentence-transformers`, FastAPI, etc.).
-- El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o pruebas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
+- El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración
-- `mcp.server` arranca con nivel `DEBUG` por defecto (puedes bajarlo con `LOG_LEVEL`) y registra cada tool solicitada, generando un `toolCallId` UUID cuando el cliente no envía uno y devolviendo tanto contenido `json` como `text` para maximizar compatibilidad con clientes MCP.
+- `mcp.server` arranca con nivel `DEBUG` por defecto (puedes bajarlo con `LOG_LEVEL`) y registra cada tool solicitada, generando un `toolCallId` UUID cuando el cliente no envía uno y devolviendo `structuredContent` más un bloque `text` para maximizar compatibilidad con clientes MCP.
 - La ruta REST `/call` y el método JSON-RPC `tools/call` registran los argumentos rechazados y mantienen el stacktrace cuando ocurre un fallo interno.
 - `mcp.toolset` emite `DEBUG` por cada ejecución, informa cuántos resultados devolvió y deja constancia de validaciones rechazadas o errores.
 - `utils.retrieval` ahora deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
 - Si prefieres menos ruido exporta `LOG_LEVEL=INFO` antes de lanzar `python app.py`.
+
+### Conformidad MCP (junio 2025)
+- Desde 2025-06-18 la respuesta de `tools/call` coloca los resultados estructurados en `structuredContent` y deja `content` únicamente con un bloque `text` serializado con `json.dumps`. El identificador se expone en `_meta.toolCallId` para correlacionar trazas.
+- `tools/list` publica también `outputSchema` y `title` por tool para facilitar validaciones de clientes MCP.
+- El endpoint JSON-RPC acepta `logging/setLevel` y ajusta el nivel de la raíz de logging durante la sesión (útil para depurar sin reiniciar el servidor).
 
 ### Índices y compatibilidad DuckDB
 - VSS (HNSW): se intenta habilitar `hnsw_enable_experimental_persistence`. Si tu DuckDB/VSS no lo soporta, se omite el índice y la búsqueda densa funcionará igualmente (un poco más lenta) ordenando por `<->`.
