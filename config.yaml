@@ -28,7 +28,7 @@ retrieval:
   final_k: 8
   force_english_queries: true
   rerank_topk: 12
-  enable_rerank: false
+  enable_rerank: true
 
 reranker:
   model_name: "Qwen/Qwen3-Reranker-0.6B"
