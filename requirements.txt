@@ -1,2 +1,8 @@
 crawl4ai
 tqdm
+duckdb
+PyYAML
+sentence-transformers
+fastapi
+uvicorn
+torch

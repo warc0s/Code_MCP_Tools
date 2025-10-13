@@ -1,0 +1,38 @@
+database:
+  path: data/rag.duckdb
+
+crawling:
+  workers: 8
+  pattern: "*"
+  max_urls: -1
+  cache_mode: enabled
+
+chunking:
+  max_tokens: 420
+  overlap_tokens: 80
+  min_chunk_tokens: 120
+  preserve_code_blocks: true
+  respect_headings: true
+
+embeddings:
+  model_name: "Qwen/Qwen3-Embedding-0.6B"
+  normalize_embeddings: true
+  query_prompt_name: "query"
+
+retrieval:
+  dense_topk: 24
+  lexical_topk: 24
+  hybrid_alpha: 0.5
+  mmr_lambda: 0.5
+  same_url_penalty: 0.08
+  final_k: 8
+  force_english_queries: true
+  rerank_topk: 12
+  enable_rerank: false
+
+reranker:
+  model_name: "Qwen/Qwen3-Reranker-0.6B"
+  max_length: 8192
+
+policy:
+  force_english_queries: true
