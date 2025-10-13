@@ -175,15 +175,19 @@ def build_app(toolset: RAGToolset) -> FastAPI:
 def run_server(toolset: RAGToolset, host: str = "127.0.0.1", port: int = 8000) -> ServerInfo:
     import uvicorn
 
-    level_name = os.getenv("LOG_LEVEL", "DEBUG").upper()
-    level = getattr(logging, level_name, logging.DEBUG)
+    level_name = os.getenv("LOG_LEVEL", "INFO").upper()
+    level = getattr(logging, level_name, logging.INFO)
+    if not isinstance(level, int):
+        level = logging.INFO
+        level_name = "INFO"
     if not logging.getLogger().handlers:
         logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     else:
         logging.getLogger().setLevel(level)
 
     app = build_app(toolset)
-    config = uvicorn.Config(app=app, host=host, port=port, log_level="debug")
+    uvicorn_level = os.getenv("UVICORN_LOG_LEVEL", level_name.lower())
+    config = uvicorn.Config(app=app, host=host, port=port, log_level=uvicorn_level)
     server = uvicorn.Server(config)
     logger.info("Iniciando servidor MCP en %s:%s", host, port)
     server.run()

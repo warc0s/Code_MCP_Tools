@@ -45,14 +45,14 @@
 ## Notas operativas
 - Se fuerza `DUCKDB_EXTENSION_DIRECTORY` a `.duckdb/extensions` para guardar FTS/VSS sin permisos root.
 - Si faltan extensiones, DuckDB pedirá descargar una vez con red.
-- Reranker desactivado por defecto (`enable_rerank: false`) para evitar costes si no se necesita.
+- Reranker activado por defecto (`enable_rerank: true`) usando `Qwen/Qwen3-Reranker-0.6B`; si necesitas omitirlo ajusta `retrieval.enable_rerank`.
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
 - `requirements.txt` cubre solo las dependencias necesarias en CPU (`torch`, `sentence-transformers`, FastAPI, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración
-- `mcp.server` arranca con nivel `DEBUG` por defecto (puedes bajarlo con `LOG_LEVEL`) y registra cada tool solicitada, generando un `toolCallId` UUID cuando el cliente no envía uno y devolviendo `structuredContent` más un bloque `text` para maximizar compatibilidad con clientes MCP.
+- `mcp.server` arranca con nivel `INFO` por defecto (ajústalo con `LOG_LEVEL` si necesitas más o menos verbosidad) y registra cada tool solicitada, generando un `toolCallId` UUID cuando el cliente no envía uno y devolviendo `structuredContent` más un bloque `text` para maximizar compatibilidad con clientes MCP.
 - La ruta REST `/call` y el método JSON-RPC `tools/call` registran los argumentos rechazados y mantienen el stacktrace cuando ocurre un fallo interno.
 - `mcp.toolset` emite `DEBUG` por cada ejecución, informa cuántos resultados devolvió y deja constancia de validaciones rechazadas o errores.
 - `utils.retrieval` ahora deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
