@@ -9,6 +9,8 @@ import uuid
 from dataclasses import dataclass
 from typing import Optional
 
+from tqdm import tqdm
+
 from utils.chunking import chunk_document
 from utils.config import AppConfig
 from utils.crawling import crawl_sitemap
@@ -28,15 +30,12 @@ def rebuild_rag_from_sitemap(
     embedder: Optional[EmbeddingProvider] = None,
 ) -> IngestionSummary:
     embedder = embedder or EmbeddingProvider(config.embeddings)
-    embedding_dim = embedder.embedding_dim
-
-    manager = DuckDBManager(config.database, embedding_dim)
-    manager.reset()
-    manager.initialize_schema()
 
     crawled_docs = crawl_sitemap(sitemap_url, config.crawling)
     if not crawled_docs:
         raise RuntimeError("No se recuperaron páginas desde el sitemap.")
+
+    print(f"Documentos crawlerados: {len(crawled_docs)}")
 
     doc_rows: list[DocumentRow] = []
     chunk_payload: list[dict] = []
@@ -72,7 +71,32 @@ def rebuild_rag_from_sitemap(
     if not chunk_payload:
         raise RuntimeError("No se generaron chunks tras el proceso de chunking.")
 
-    embeddings = embedder.embed_documents([payload["text"] for payload in chunk_payload])
+    print(f"Chunks únicos listos para embebido: {len(chunk_payload)}")
+
+    texts = [payload["text"] for payload in chunk_payload]
+    embeddings: list[list[float]] = []
+    batch_size = max(1, getattr(config.embeddings, "batch_size", 64))
+    with tqdm(total=len(texts), desc="Embeddings", unit="chunk") as progress:
+        for start in range(0, len(texts), batch_size):
+            batch = texts[start : start + batch_size]
+            batch_vectors = embedder.embed_documents(batch)
+            if len(batch_vectors) != len(batch):
+                raise RuntimeError("El proveedor de embeddings devolvió un lote con longitud inesperada.")
+            embeddings.extend(batch_vectors)
+            progress.update(len(batch_vectors))
+
+    if len(embeddings) != len(chunk_payload):
+        raise RuntimeError("Faltan vectores de embeddings para completar la ingesta.")
+
+    embedding_dim = embedder.embedding_dim
+
+    print("Embeddings generados. Inicializando base de datos DuckDB...")
+
+    manager = DuckDBManager(config.database, embedding_dim)
+    manager.reset()
+    manager.initialize_schema()
+
+    print("Insertando documentos y chunks en DuckDB...")
 
     chunk_rows: list[ChunkRow] = []
     for payload, vector in zip(chunk_payload, embeddings):
@@ -93,5 +117,21 @@ def rebuild_rag_from_sitemap(
 
     manager.insert_documents(doc_rows)
     manager.insert_chunks(chunk_rows)
+
+    reranker_model = (
+        config.reranker.model_name
+        if config.main.mode == "local"
+        else config.reranker.cloud_model_name or config.reranker.model_name
+    )
+    manager.write_metadata(
+        {
+            "runtime_mode": config.main.mode,
+            "embedding_model_name": embedder.model_name,
+            "embedding_dim": str(embedding_dim),
+            "reranker_model_name": reranker_model,
+        }
+    )
+
+    manager.teardown()
 
     return IngestionSummary(documents=len(doc_rows), chunks=len(chunk_rows))

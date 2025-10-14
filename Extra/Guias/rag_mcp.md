@@ -7,11 +7,18 @@
 - `mcp/` contiene `toolset` (esquemas JSON de cada tool) y `server` (FastAPI + uvicorn).
 - `app.py` ofrece CLI: (1) reconstruir RAG desde sitemap, (2) arrancar servidor MCP.
 
+## Modos de ejecución
+- `config.yaml` expone `main.mode` con valores `local` o `cloud`.
+- `local` usa los modelos HuggingFace configurados (`Qwen/Qwen3-Embedding-0.6B` y `Qwen/Qwen3-Reranker-0.6B`) descargándolos a `.cache/models/`.
+- `cloud` usa el embedding OpenAI `text-embedding-3-small` vía API oficial (requiere `.env` con `openai_api_key=...`) y mantiene el reranker Qwen `8B` servido por DeepInfra (`DEEPINFRA_API_KEY=...` si activas reranking).
+- La CLI muestra el modo y los modelos activos en cada iteración. Al iniciar el servidor se imprime un aviso si la BD DuckDB fue creada en otro modo, indicando los modelos almacenados vs. configurados y la dimensión registrada; puedes abortar o continuar bajo tu responsabilidad.
+- Durante la ingesta se guardan en la tabla `metadata` los campos `runtime_mode`, `embedding_model_name`, `embedding_dim` y `reranker_model_name` para futuras verificaciones.
+
 ## Flujo de ingesta
 1. CLI opción 1 pide sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.
 2. Se crawlera con Crawl4AI, limpiar/slugify, deduplicar por fingerprint.
 3. Chunking conserva jerarquía y bloques de código, con solapado configurable.
-4. Se embebe con `Qwen/Qwen3-Embedding-0.6B`, normaliza y guarda en DuckDB (`FLOAT[dim]`).
+4. Se embebe con el modelo definido por el modo (`Qwen/Qwen3-Embedding-0.6B` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en DuckDB (`FLOAT[dim]`).
 5. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
 
 ## Retrievers / Tools
@@ -45,10 +52,11 @@
 ## Notas operativas
 - Se fuerza `DUCKDB_EXTENSION_DIRECTORY` a `.duckdb/extensions` para guardar FTS/VSS sin permisos root.
 - Si faltan extensiones, DuckDB pedirá descargar una vez con red.
-- Reranker activado por defecto (`enable_rerank: true`) usando `Qwen/Qwen3-Reranker-0.6B`; si necesitas omitirlo ajusta `retrieval.enable_rerank`.
+- Reranker activado por defecto (`enable_rerank: true`) usando Qwen `0.6B` en local o `8B` vía DeepInfra en cloud; desactívalo con `retrieval.enable_rerank`.
+- Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
-- `requirements.txt` cubre solo las dependencias necesarias en CPU (`torch`, `sentence-transformers`, FastAPI, etc.).
+- `requirements.txt` incluye CPU libs y los clientes remotos (`torch`, `sentence-transformers`, FastAPI, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración

@@ -1,3 +1,6 @@
+main:
+  mode: cloud
+
 database:
   path: data/rag.duckdb
 
@@ -16,6 +19,7 @@ chunking:
 
 embeddings:
   model_name: "Qwen/Qwen3-Embedding-0.6B"
+  cloud_model_name: "text-embedding-3-small"
   normalize_embeddings: true
   query_prompt_name: "query"
 
@@ -32,6 +36,7 @@ retrieval:
 
 reranker:
   model_name: "Qwen/Qwen3-Reranker-0.6B"
+  cloud_model_name: "Qwen/Qwen3-Reranker-8B"
   max_length: 8192
 
 policy:
