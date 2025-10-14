@@ -1,6 +1,13 @@
 # Auto_MCP_Tools
 
-VERSION ACTUAL: V1.0
+VERSION ACTUAL: V2.0
+
+## Novedades principales de la V2
+
+- Dualidad de modos `local` y `cloud` apuntalados por `config.yaml`, alternando entre modelos Qwen on-prem y endpoints OpenAI/DeepInfra sin tocar código.
+- Ingesta reforzada que normaliza embeddings, persiste metadatos de ejecución y reconstruye índices DuckDB (HNSW + FTS) listos para consultas híbridas con MMR y reranker.
+- Servidor MCP endurecido (FastAPI + uvicorn) con endpoints REST/JSON-RPC compatibles, validación estricta de payloads y trazabilidad mediante `toolCallId`.
+- Guía operativa actualizada en `Extra/Guias/rag_mcp.md` con arquitectura, logging, despliegue Codex CLI y notas de conformidad MCP 2025.
 
 CLI para construir un RAG “enchufable” basado en DuckDB + MCP.
 
