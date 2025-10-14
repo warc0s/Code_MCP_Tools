@@ -1,25 +1,42 @@
 """
-Wrapper del reranker Qwen/Qwen3-Reranker-0.6B.
+Wrapper del reranker con soporte local o mediante DeepInfra.
 """
 
 from __future__ import annotations
 
+import os
 from typing import Iterable, List
 
 from utils.cache import configure_model_cache
 from utils.config import RerankerConfig
+from utils.env import load_env_file
+
+CLOUD_RERANKER_MODEL = "Qwen/Qwen3-Reranker-8B"
+DEEPINFRA_RERANKER_BASE_URL = "https://api.deepinfra.com/v1/inference/"
 
 
 class PassageReranker:
-    def __init__(self, config: RerankerConfig):
+    def __init__(self, config: RerankerConfig, mode: str = "local"):
+        normalized_mode = (mode or "local").strip().lower()
+        if normalized_mode not in {"local", "cloud"}:
+            raise ValueError("El modo del reranker debe ser 'local' o 'cloud'.")
+        self.mode = normalized_mode
+
         self.config = config
+        self.model_name = (
+            config.model_name if self.mode == "local" else config.cloud_model_name or CLOUD_RERANKER_MODEL
+        )
+
         self._model = None
         self._tokenizer = None
         self._prefix_tokens = None
         self._suffix_tokens = None
+        self._cloud_token: str | None = None
         self._task = "Given a web search query, retrieve relevant passages that answer the query"
 
     def _ensure_model(self) -> None:
+        if self.mode == "cloud":
+            return
         if self._model is not None:
             return
 
@@ -34,9 +51,9 @@ class PassageReranker:
             ) from exc
 
         tokenizer_kwargs = {"padding_side": "left"}
-        self._tokenizer = AutoTokenizer.from_pretrained(self.config.model_name, **tokenizer_kwargs)
+        self._tokenizer = AutoTokenizer.from_pretrained(self.model_name, **tokenizer_kwargs)
 
-        self._model = AutoModelForCausalLM.from_pretrained(self.config.model_name).eval()
+        self._model = AutoModelForCausalLM.from_pretrained(self.model_name).eval()
         self._model.to(torch.device("cpu"))
 
         prefix = (
@@ -83,10 +100,65 @@ class PassageReranker:
             probs = torch.nn.functional.log_softmax(batch_scores, dim=1).exp()
             return probs[:, 1].tolist()
 
+    def _ensure_cloud_token(self) -> str:
+        if self._cloud_token:
+            return self._cloud_token
+        load_env_file()
+        token = os.getenv("DEEPINFRA_API_KEY")
+        if not token:
+            raise RuntimeError("Falta la variable DEEPINFRA_API_KEY para usar el reranker en modo cloud.")
+        self._cloud_token = token
+        return token
+
+    def _rerank_cloud(self, query: str, candidates: List[dict], top_k: int) -> List[dict]:
+        size = min(top_k, len(candidates))
+        if size <= 0:
+            return candidates
+
+        documents = [item["text"] for item in candidates[:size]]
+        payload = {
+            "queries": [query] * size,
+            "documents": documents,
+        }
+
+        try:
+            import requests
+        except ImportError as exc:
+            raise RuntimeError(
+                "El paquete 'requests' es obligatorio para usar el modo cloud del reranker."
+            ) from exc
+
+        headers = {
+            "Authorization": f"bearer {self._ensure_cloud_token()}",
+            "Content-Type": "application/json",
+        }
+        url = f"{DEEPINFRA_RERANKER_BASE_URL}{self.model_name}"
+        try:
+            response = requests.post(url, headers=headers, json=payload, timeout=60)
+        except requests.RequestException as exc:
+            raise RuntimeError(f"Falló la petición al reranker de DeepInfra: {exc}") from exc
+
+        if response.status_code >= 400:
+            raise RuntimeError(
+                f"DeepInfra devolvió un error {response.status_code} para el reranker: {response.text}"
+            )
+
+        data = response.json()
+        scores = data.get("scores")
+        if not isinstance(scores, list) or len(scores) != size:
+            raise RuntimeError("Respuesta inesperada del reranker en modo cloud.")
+
+        for item, score in zip(candidates[:size], scores):
+            item["rerank_score"] = float(score)
+        return sorted(candidates, key=lambda it: it.get("rerank_score", it["score"]), reverse=True)
+
     def rerank(self, query: str, candidates: Iterable[dict], top_k: int) -> List[dict]:
         items = list(candidates)
         if not items:
             return items
+        if self.mode == "cloud":
+            return self._rerank_cloud(query, items, top_k)
+
         self._ensure_model()
         texts = [item["text"] for item in items[:top_k]]
         inputs = self._build_inputs(query, texts)
@@ -96,4 +168,4 @@ class PassageReranker:
         return sorted(items, key=lambda it: it.get("rerank_score", it["score"]), reverse=True)
 
 
-__all__ = ["PassageReranker"]
+__all__ = ["CLOUD_RERANKER_MODEL", "PassageReranker"]

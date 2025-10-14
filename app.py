@@ -8,10 +8,12 @@ import duckdb
 from mcp.server import run_server
 from mcp.toolset import RAGToolset
 from utils.config import AppConfig
-from utils.embeddings import EmbeddingProvider
+from utils.database import read_metadata
+from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
+from utils.env import load_env_file
 from utils.pipeline import rebuild_rag_from_sitemap
 from utils.retrieval import Retriever
-from utils.reranker import PassageReranker
+from utils.reranker import CLOUD_RERANKER_MODEL, PassageReranker
 
 
 def ensure_extension_directory() -> Path:
@@ -21,13 +23,28 @@ def ensure_extension_directory() -> Path:
     return base
 
 
+def resolve_model_names(config: AppConfig) -> dict[str, str]:
+    mode = config.main.mode
+    embedding_model = (
+        config.embeddings.model_name
+        if mode == "local"
+        else config.embeddings.cloud_model_name or DEFAULT_CLOUD_EMBED_MODEL
+    )
+    reranker_model = (
+        config.reranker.model_name
+        if mode == "local"
+        else config.reranker.cloud_model_name or CLOUD_RERANKER_MODEL
+    )
+    return {"embedding": embedding_model, "reranker": reranker_model}
+
+
 def rebuild_rag(config: AppConfig) -> None:
     sitemap_url = input("Introduce la URL del sitemap a indexar: ").strip()
     if not sitemap_url:
         print("No se proporcionó URL. Operación cancelada.")
         return
     ensure_extension_directory()
-    embedder = EmbeddingProvider(config.embeddings)
+    embedder = EmbeddingProvider(config.embeddings, mode=config.main.mode)
     try:
         summary = rebuild_rag_from_sitemap(sitemap_url, config, embedder)
     except Exception as exc:
@@ -38,6 +55,9 @@ def rebuild_rag(config: AppConfig) -> None:
     print(f"- Documentos indexados: {summary.documents}")
     print(f"- Chunks almacenados: {summary.chunks}")
     print(f"- Base de datos: {Path(config.database.path).resolve()}")
+    models = resolve_model_names(config)
+    print(f"- Modo de ingestión: {config.main.mode}")
+    print(f"- Embeddings utilizados: {models['embedding']}")
 
 
 def start_server(config: AppConfig) -> None:
@@ -70,8 +90,43 @@ def start_server(config: AppConfig) -> None:
             connection.close()
             raise RuntimeError(f"No se pudo cargar la extensión {extension} en modo lectura: {exc}") from exc
 
-    embedder = EmbeddingProvider(config.embeddings)
-    reranker = PassageReranker(config.reranker) if config.retrieval.enable_rerank else None
+    metadata = read_metadata(connection)
+    current_models = resolve_model_names(config)
+    stored_mode = metadata.get("runtime_mode")
+    stored_dim = metadata.get("embedding_dim")
+
+    if stored_mode and stored_mode != config.main.mode:
+        print("")
+        print("Advertencia: la base de datos se generó en un modo distinto al configurado actualmente.")
+        print(f"- Modo en BD: {stored_mode}")
+        print(f"- Modo actual: {config.main.mode}")
+        stored_embed = metadata.get("embedding_model_name")
+        stored_reranker = metadata.get("reranker_model_name")
+        print(f"- Embeddings actuales: {current_models['embedding']}")
+        if stored_embed:
+            print(f"- Embeddings en BD: {stored_embed}")
+        if stored_dim:
+            print(f"- Dimensión embeddings en BD: {stored_dim}")
+        configured_dim = config.embeddings.embedding_dim
+        if configured_dim:
+            print(f"- Dimensión configurada actual: {configured_dim}")
+        else:
+            print("- Dimensión configurada actual: desconocida (se resolverá al generar embeddings)")
+        print(f"- Reranker actual: {current_models['reranker']}")
+        if stored_reranker:
+            print(f"- Reranker en BD: {stored_reranker}")
+        answer = input("Las dimensiones podrían no coincidir. ¿Deseas continuar? [s/N]: ").strip().lower()
+        if answer not in {"s", "si", "sí", "y", "yes"}:
+            print("Operación cancelada.")
+            connection.close()
+            return
+
+    embedder = EmbeddingProvider(config.embeddings, mode=config.main.mode)
+    reranker = (
+        PassageReranker(config.reranker, mode=config.main.mode)
+        if config.retrieval.enable_rerank
+        else None
+    )
     retriever = Retriever(connection, config.retrieval, embedder, reranker=reranker)
     toolset = RAGToolset(
         retriever=retriever,
@@ -79,6 +134,11 @@ def start_server(config: AppConfig) -> None:
     )
 
     default_port = "8000"
+    print(
+        f"Modo de operación: {config.main.mode} | "
+        f"Embeddings: {current_models['embedding']} | "
+        f"Reranker: {current_models['reranker']}"
+    )
     port_input = input(f"Puerto para el servidor MCP [{default_port}]: ").strip()
     port = int(port_input) if port_input else int(default_port)
     host = "127.0.0.1"
@@ -90,6 +150,7 @@ def start_server(config: AppConfig) -> None:
 
 
 def main() -> None:
+    load_env_file()
     try:
         config = AppConfig.load("config.yaml")
     except Exception as exc:
@@ -99,6 +160,10 @@ def main() -> None:
     while True:
         print("")
         print("=== RAG Plug & Play ===")
+        models = resolve_model_names(config)
+        print(f"Modo actual: {config.main.mode}")
+        print(f"Embeddings en uso: {models['embedding']}")
+        print(f"Reranker en uso: {models['reranker']}")
         print("1) Crear/Sustituir nuevo RAG")
         print("2) Ejecutar servidor MCP")
         print("q) Salir")

@@ -15,6 +15,17 @@ import yaml
 
 
 @dataclass(frozen=True)
+class MainConfig:
+    mode: str = "local"
+
+    def __post_init__(self) -> None:
+        normalized = (self.mode or "local").strip().lower()
+        if normalized not in {"local", "cloud"}:
+            raise ValueError("El modo principal debe ser 'local' o 'cloud'.")
+        object.__setattr__(self, "mode", normalized)
+
+
+@dataclass(frozen=True)
 class DatabaseConfig:
     path: Path = Path("data/rag.duckdb")
 
@@ -42,6 +53,7 @@ class EmbeddingConfig:
     normalize_embeddings: bool = True
     query_prompt_name: Optional[str] = "query"
     embedding_dim: Optional[int] = None
+    cloud_model_name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +73,7 @@ class RetrievalConfig:
 class RerankerConfig:
     model_name: str = "Qwen/Qwen3-Reranker-0.6B"
     max_length: int = 8192
+    cloud_model_name: Optional[str] = None
 
 
 @dataclass(frozen=True)
@@ -70,6 +83,7 @@ class PolicyConfig:
 
 @dataclass(frozen=True)
 class AppConfig:
+    main: MainConfig = field(default_factory=MainConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
     crawling: CrawlingConfig = field(default_factory=CrawlingConfig)
     chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
@@ -88,11 +102,14 @@ class AppConfig:
     def from_dict(cls, data: Dict[str, Any]) -> "AppConfig":
         def get_section(name: str, klass):
             section = data.get(name, {})
+            if isinstance(section, str) and "mode" in klass.__dataclass_fields__:
+                section = {"mode": section}
             if not isinstance(section, dict):
                 raise ValueError(f"La sección '{name}' debe ser un objeto.")
             return cls._build_dataclass(klass, section) if section else klass()
 
         return cls(
+            main=get_section("main", MainConfig),
             database=get_section("database", DatabaseConfig),
             crawling=get_section("crawling", CrawlingConfig),
             chunking=get_section("chunking", ChunkingConfig),
@@ -119,6 +136,7 @@ __all__ = [
     "CrawlingConfig",
     "DatabaseConfig",
     "EmbeddingConfig",
+    "MainConfig",
     "PolicyConfig",
     "RetrievalConfig",
     "RerankerConfig",

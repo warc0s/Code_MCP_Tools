@@ -6,3 +6,5 @@ sentence-transformers
 fastapi
 uvicorn
 torch
+openai
+requests

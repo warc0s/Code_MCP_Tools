@@ -1,5 +1,7 @@
 # Auto_MCP_Tools
 
+VERSION ACTUAL: V1.0
+
 CLI para construir un RAG “enchufable” basado en DuckDB + MCP.
 
 ## Requisitos

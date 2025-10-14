@@ -7,7 +7,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
+from typing import Iterable, Mapping, Sequence
 
 import duckdb
 
@@ -96,6 +96,7 @@ class DuckDBManager:
         conn = self.connection
         conn.execute("DROP TABLE IF EXISTS chunks;")
         conn.execute("DROP TABLE IF EXISTS docs;")
+        conn.execute("DROP TABLE IF EXISTS metadata;")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS docs (
@@ -118,6 +119,14 @@ class DuckDBManager:
                 fingerprint TEXT,
                 embedding FLOAT[{self.embedding_dim}],
                 FOREIGN KEY(doc_id) REFERENCES docs(doc_id)
+            );
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT
             );
             """
         )
@@ -167,10 +176,26 @@ class DuckDBManager:
         )
         conn.execute("CHECKPOINT;")
 
+    def write_metadata(self, entries: Mapping[str, str]) -> None:
+        conn = self.connection
+        conn.executemany(
+            "INSERT OR REPLACE INTO metadata (key, value) VALUES (?, ?);",
+            [(str(key), "" if value is None else str(value)) for key, value in entries.items()],
+        )
+        conn.execute("CHECKPOINT;")
+
     def teardown(self) -> None:
         if self._connection:
             self._connection.close()
             self._connection = None
 
 
-__all__ = ["DuckDBManager", "DocumentRow", "ChunkRow"]
+def read_metadata(connection: duckdb.DuckDBPyConnection) -> dict[str, str]:
+    try:
+        rows = connection.execute("SELECT key, value FROM metadata;").fetchall()
+    except Exception:
+        return {}
+    return {str(key): "" if value is None else str(value) for key, value in rows}
+
+
+__all__ = ["DuckDBManager", "DocumentRow", "ChunkRow", "read_metadata"]
