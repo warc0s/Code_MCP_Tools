@@ -1,8 +1,8 @@
 # Auto_MCP_Tools
 
-VERSION ACTUAL: V2.1
+VERSION ACTUAL: V2.2
 
-## Novedades principales de la V2.1
+## Novedades principales de la V2.2
 
 - Dualidad de modos `local` y `cloud` apuntalados por `config.yaml`, alternando entre modelos Qwen on-prem y endpoints OpenAI/DeepInfra sin tocar código.
 - Ingesta reforzada que normaliza embeddings, persiste metadatos de ejecución y reconstruye índices DuckDB (HNSW + FTS) listos para consultas híbridas con MMR y reranker.
@@ -10,6 +10,7 @@ VERSION ACTUAL: V2.1
 - Guía operativa actualizada en `Extra/Guias/rag_mcp.md` con arquitectura, logging, despliegue Codex CLI y notas de conformidad MCP 2025.
 - Nueva familia de opciones `1.x` en la CLI para reconstruir el RAG tanto desde un sitemap (1.1) como desde ficheros de URLs en la carpeta `txt/` (1.2), siempre reseteando la base de datos anterior.
 - Al iniciar la CLI se muestra un resumen de la base de datos actual (ruta, número de documentos y algunas URLs de referencia) para recordar de “qué” son los documentos indexados.
+- Configuración MCP ampliada en `config.yaml` (`mcp.tools`) para activar o desactivar tools específicas del servidor (por ejemplo, exponer solo `hybrid_search` y `chunks_by_url` en producción).
 
 CLI para construir un RAG “enchufable” basado en DuckDB + MCP.
 
@@ -45,3 +46,5 @@ Valida uso de BM25, normalización + MMR de la búsqueda híbrida y el contrato 
 
 - **FTS / BM25 real en DuckDB**: actualmente, si la tabla/índice `fts_main_chunks` no existe (por versión de DuckDB o incompatibilidad de la extensión `fts`), la búsqueda léxica cae automáticamente a un fallback basado en `LIKE` sobre `chunks.text`, con un scoring simple por número de coincidencias. Esto mantiene la funcionalidad, pero no es equivalente a un BM25 real.  
   - Pendiente: actualizar DuckDB y la extensión `fts` para que soporte correctamente `CREATE INDEX ... USING fts(text)`, asegurar la creación de `fts_main_chunks` en `utils.database.initialize_schema`, y validar que las consultas léxicas en `utils.retrieval._lexical_candidates` usan siempre `match_bm25`/`bm25` sin necesidad de fallback.
+- **Refresco de tools MCP en clientes**: la configuración `mcp.tools` ya evita que ciertas tools (por ejemplo `dense_search` o `lexical_search`) se expongan desde el servidor, pero algunos clientes pueden seguir “recordando” tools antiguas si no vuelven a llamar a `tools/list`.  
+  - Pendiente: documentar y/o implementar en los clientes de referencia un refresco explícito de tools al inicio de cada sesión para que solo se registren las tools efectivamente habilitadas en el servidor.

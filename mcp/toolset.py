@@ -5,7 +5,7 @@ Toolset MCP para exponer búsquedas del RAG.
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 
 logger = logging.getLogger(__name__)
@@ -57,10 +57,15 @@ CHUNK_OUTPUT_SCHEMA: Dict[str, Any] = {
 
 
 class RAGToolset:
-    def __init__(self, retriever, force_english_queries: bool = True):
+    def __init__(
+        self,
+        retriever,
+        force_english_queries: bool = True,
+        enabled_tools: Optional[Iterable[str]] = None,
+    ):
         self.retriever = retriever
         self.force_english_queries = force_english_queries
-        self._tools: Dict[str, Dict[str, Any]] = {
+        all_tools: Dict[str, Dict[str, Any]] = {
             "dense_search": {
                 "title": "Dense search",
                 "description": "Dense vector search using cosine similarity over the embedding index.",
@@ -113,6 +118,20 @@ class RAGToolset:
                 "output_schema": CHUNK_OUTPUT_SCHEMA,
             },
         }
+        if enabled_tools is not None:
+            enabled_set = {name for name in enabled_tools if name in all_tools}
+            disabled = {name for name in all_tools.keys() if name not in enabled_set}
+            if not enabled_set:
+                logger.warning(
+                    "Configuración MCP sin tools válidas; se mantendrán todas las tools por defecto."
+                )
+                self._tools = all_tools
+            else:
+                if disabled:
+                    logger.info("Tools MCP deshabilitadas por configuración: %s", ", ".join(sorted(disabled)))
+                self._tools = {name: all_tools[name] for name in sorted(enabled_set)}
+        else:
+            self._tools = all_tools
 
     def list_tools(self) -> Dict[str, Dict[str, Any]]:
         return self._tools

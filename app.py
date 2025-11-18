@@ -217,9 +217,14 @@ def start_server(config: AppConfig) -> None:
         else None
     )
     retriever = Retriever(connection, config.retrieval, embedder, reranker=reranker)
+    enabled_tools = None
+    tools_config = getattr(config, "mcp", None)
+    if tools_config and tools_config.tools:
+        enabled_tools = [name for name, enabled in tools_config.tools.items() if enabled]
     toolset = RAGToolset(
         retriever=retriever,
         force_english_queries=config.policy.force_english_queries,
+        enabled_tools=enabled_tools,
     )
 
     default_port = "8000"

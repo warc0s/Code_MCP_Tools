@@ -28,6 +28,18 @@
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - Cada tool valida payload vs JSON Schema y fuerza consultas ASCII si `policy.force_english_queries`.
+- Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante la sección `mcp.tools`, por ejemplo:
+- 
+- ```yaml
+- mcp:
+-   tools:
+-     dense_search: false
+-     lexical_search: false
+-     hybrid_search: true
+-     chunks_by_url: true
+- ```
+- 
+- Si no se especifica `mcp.tools`, se exponen todas las tools por defecto.
 
 ## Servidor MCP
 - API REST (`/health`, `/tools`, `/call`) servida con FastAPI.

@@ -82,6 +82,11 @@ class PolicyConfig:
 
 
 @dataclass(frozen=True)
+class MCPConfig:
+    tools: Dict[str, bool] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
 class AppConfig:
     main: MainConfig = field(default_factory=MainConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
@@ -91,6 +96,7 @@ class AppConfig:
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
+    mcp: MCPConfig = field(default_factory=MCPConfig)
 
     @staticmethod
     def _build_dataclass(dataclass_type, data: Dict[str, Any]):
@@ -117,6 +123,7 @@ class AppConfig:
             retrieval=get_section("retrieval", RetrievalConfig),
             reranker=get_section("reranker", RerankerConfig),
             policy=get_section("policy", PolicyConfig),
+            mcp=get_section("mcp", MCPConfig),
         )
 
     @classmethod
@@ -136,6 +143,7 @@ __all__ = [
     "CrawlingConfig",
     "DatabaseConfig",
     "EmbeddingConfig",
+    "MCPConfig",
     "MainConfig",
     "PolicyConfig",
     "RetrievalConfig",

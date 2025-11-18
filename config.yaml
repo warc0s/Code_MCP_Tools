@@ -41,3 +41,10 @@ reranker:
 
 policy:
   force_english_queries: true
+
+mcp:
+  tools:
+    dense_search: false
+    lexical_search: false
+    hybrid_search: true
+    chunks_by_url: true
