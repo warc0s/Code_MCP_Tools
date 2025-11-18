@@ -5,7 +5,7 @@
 - `utils/` aloja módulos independientes: `crawling`, `chunking`, `embeddings`, `database`, `pipeline`, `retrieval`, `reranker`.
 - La BBDD es DuckDB (`data/rag.duckdb`) con tablas `docs` y `chunks`, índices VSS (HNSW/cosine) y FTS (BM25).
 - `mcp/` contiene `toolset` (esquemas JSON de cada tool) y `server` (FastAPI + uvicorn).
-- `app.py` ofrece CLI: (1) reconstruir RAG desde sitemap, (2) arrancar servidor MCP.
+- `app.py` ofrece CLI: opción 1.x para reconstruir el RAG (desde sitemap o desde ficheros de URLs en `txt/`) y opción 2 para arrancar el servidor MCP.
 
 ## Modos de ejecución
 - `config.yaml` expone `main.mode` con valores `local` o `cloud`.
@@ -15,11 +15,12 @@
 - Durante la ingesta se guardan en la tabla `metadata` los campos `runtime_mode`, `embedding_model_name`, `embedding_dim` y `reranker_model_name` para futuras verificaciones.
 
 ## Flujo de ingesta
-1. CLI opción 1 pide sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.
-2. Se crawlera con Crawl4AI, limpiar/slugify, deduplicar por fingerprint.
-3. Chunking conserva jerarquía y bloques de código, con solapado configurable.
-4. Se embebe con el modelo definido por el modo (`Qwen/Qwen3-Embedding-0.6B` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en DuckDB (`FLOAT[dim]`).
-5. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
+1. CLI opción 1.1 pide un sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.
+2. CLI opción 1.2 lista los ficheros `.txt` en la carpeta `txt/` (una URL por línea, se ignoran líneas vacías o que empiecen por `#`) y ejecuta `utils.pipeline.rebuild_rag_from_urls` con el fichero seleccionado.
+3. En ambos casos se crawlera con Crawl4AI, se limpia/slugify y se deduplican páginas por fingerprint.
+4. Chunking conserva jerarquía y bloques de código, con solapado configurable.
+5. Se embebe con el modelo definido por el modo (`Qwen/Qwen3-Embedding-0.6B` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en DuckDB (`FLOAT[dim]`).
+6. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
 
 ## Retrievers / Tools
 - `dense_search`: solo vectorial (cosine).
@@ -65,6 +66,12 @@
 - `mcp.toolset` emite `DEBUG` por cada ejecución, informa cuántos resultados devolvió y deja constancia de validaciones rechazadas o errores.
 - `utils.retrieval` ahora deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
 - Si prefieres menos ruido exporta `LOG_LEVEL=INFO` antes de lanzar `python app.py`.
+
+## Cómo resetear la base de datos
+
+- No es necesario borrar archivos manualmente.
+- Cada vez que eliges una opción `1.x` en `python app.py`, se elimina la base de datos actual (`data/rag.duckdb`) y se crea una nueva desde cero.
+- El nuevo índice se rellena únicamente con los documentos obtenidos del sitemap (1.1) o de las URLs del fichero seleccionado en `txt/` (1.2), sustituyendo por completo a los anteriores.
 
 ### Conformidad MCP (junio 2025)
 - Desde 2025-06-18 la respuesta de `tools/call` coloca los resultados estructurados en `structuredContent` y deja `content` únicamente con un bloque `text` serializado con `json.dumps`. El identificador se expone en `_meta.toolCallId` para correlacionar trazas.

@@ -11,7 +11,7 @@ from utils.config import AppConfig
 from utils.database import read_metadata
 from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
 from utils.env import load_env_file
-from utils.pipeline import rebuild_rag_from_sitemap
+from utils.pipeline import rebuild_rag_from_sitemap, rebuild_rag_from_urls
 from utils.retrieval import Retriever
 from utils.reranker import CLOUD_RERANKER_MODEL, PassageReranker
 
@@ -58,6 +58,95 @@ def rebuild_rag(config: AppConfig) -> None:
     models = resolve_model_names(config)
     print(f"- Modo de ingestión: {config.main.mode}")
     print(f"- Embeddings utilizados: {models['embedding']}")
+
+
+def rebuild_rag_from_file(config: AppConfig) -> None:
+    txt_dir = Path("txt")
+    txt_dir.mkdir(parents=True, exist_ok=True)
+    txt_files = sorted(p for p in txt_dir.glob("*.txt") if p.is_file())
+    if not txt_files:
+        print("No se encontraron ficheros .txt en la carpeta 'txt'.")
+        print("Crea un fichero con una URL por línea dentro de 'txt/' y vuelve a intentarlo.")
+        return
+    print("Ficheros de URLs disponibles en 'txt/':")
+    for idx, path in enumerate(txt_files, start=1):
+        print(f"{idx}) {path.name}")
+    choice = input("Selecciona el fichero de URLs (número) o pulsa Enter para cancelar: ").strip()
+    if not choice:
+        print("Operación cancelada.")
+        return
+    try:
+        index = int(choice)
+    except ValueError:
+        print("Selección no válida. Operación cancelada.")
+        return
+    if index < 1 or index > len(txt_files):
+        print("Selección fuera de rango. Operación cancelada.")
+        return
+    path = txt_files[index - 1]
+    try:
+        content = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        print(f"No se pudo leer el fichero de URLs: {exc}")
+        return
+    urls: list[str] = []
+    for line in content.splitlines():
+        candidate = line.strip()
+        if not candidate or candidate.startswith("#"):
+            continue
+        urls.append(candidate)
+    if not urls:
+        print("El fichero no contiene URLs válidas. Operación cancelada.")
+        return
+    ensure_extension_directory()
+    embedder = EmbeddingProvider(config.embeddings, mode=config.main.mode)
+    try:
+        summary = rebuild_rag_from_urls(urls, config, embedder)
+    except Exception as exc:
+        print(f"Error reconstruyendo el RAG desde fichero de URLs: {exc}")
+        return
+    print("")
+    print("RAG reconstruido correctamente desde fichero de URLs.")
+    print(f"- Documentos indexados: {summary.documents}")
+    print(f"- Chunks almacenados: {summary.chunks}")
+    print(f"- Base de datos: {Path(config.database.path).resolve()}")
+    models = resolve_model_names(config)
+    print(f"- Modo de ingestión: {config.main.mode}")
+    print(f"- Embeddings utilizados: {models['embedding']}")
+
+
+def describe_current_database(config: AppConfig) -> None:
+    db_path = Path(config.database.path)
+    if not db_path.exists():
+        print("BD actual: no existe todavía. Ejecuta una opción 1.x para construirla.")
+        return
+    try:
+        connection = duckdb.connect(db_path.as_posix(), read_only=True)
+    except Exception as exc:
+        print(f"BD actual: no se pudo abrir {db_path}: {exc}")
+        return
+    try:
+        try:
+            row = connection.execute("SELECT COUNT(*) FROM docs;").fetchone()
+            docs_count = int(row[0]) if row else 0
+        except Exception:
+            print(f"BD actual: {db_path} (estructura desconocida, tabla 'docs' no encontrada)")
+            return
+        urls: list[str] = []
+        try:
+            rows = connection.execute(
+                "SELECT url FROM docs ORDER BY created_at ASC LIMIT 3;"
+            ).fetchall()
+            urls = [r[0] for r in rows if r and r[0]]
+        except Exception:
+            urls = []
+        print(f"BD actual: {db_path} | documentos: {docs_count}")
+        if urls:
+            print("- URLs de referencia:")
+            for url in urls:
+                print(f"  · {url}")
+    finally:
+        connection.close()
 
 
 def start_server(config: AppConfig) -> None:
@@ -160,16 +249,31 @@ def main() -> None:
     while True:
         print("")
         print("=== RAG Plug & Play ===")
+        describe_current_database(config)
         models = resolve_model_names(config)
         print(f"Modo actual: {config.main.mode}")
         print(f"Embeddings en uso: {models['embedding']}")
         print(f"Reranker en uso: {models['reranker']}")
-        print("1) Crear/Sustituir nuevo RAG")
+        print("1) Crear/Sustituir RAG")
+        print("   1.1) Desde sitemap")
+        print("   1.2) Desde fichero de URLs (carpeta txt/)")
+        print("   AVISO: cualquier opción 1.x eliminará y recreará la base de datos actual.")
         print("2) Ejecutar servidor MCP")
         print("q) Salir")
         choice = input("> ").strip().lower()
         if choice == "1":
-            rebuild_rag(config)
+            while True:
+                subchoice = input("Elige 1.1 (sitemap), 1.2 (txt) o q para volver: ").strip().lower()
+                if subchoice in {"1.1", "11", "s", "sitemap"}:
+                    rebuild_rag(config)
+                    break
+                if subchoice in {"1.2", "12", "t", "txt"}:
+                    rebuild_rag_from_file(config)
+                    break
+                if subchoice in {"q", "quit", "exit"}:
+                    print("Volviendo al menú principal.")
+                    break
+                print("Opción de submenú no reconocida.")
         elif choice == "2":
             try:
                 start_server(config)

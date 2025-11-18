@@ -1,5 +1,5 @@
 """
-Pipeline de ingesta que construye la base de datos RAG desde un sitemap.
+Pipeline de ingesta que construye la base de datos RAG a partir de distintas fuentes.
 """
 
 from __future__ import annotations
@@ -7,13 +7,13 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterable, Optional
 
 from tqdm import tqdm
 
 from utils.chunking import chunk_document
 from utils.config import AppConfig
-from utils.crawling import crawl_sitemap
+from utils.crawling import CrawledDocument, crawl_sitemap, crawl_url_list
 from utils.database import ChunkRow, DocumentRow, DuckDBManager
 from utils.embeddings import EmbeddingProvider
 
@@ -24,16 +24,14 @@ class IngestionSummary:
     chunks: int
 
 
-def rebuild_rag_from_sitemap(
-    sitemap_url: str,
+def _rebuild_rag_from_crawled_documents(
+    crawled_docs: Iterable[CrawledDocument],
     config: AppConfig,
-    embedder: Optional[EmbeddingProvider] = None,
+    embedder: EmbeddingProvider,
 ) -> IngestionSummary:
-    embedder = embedder or EmbeddingProvider(config.embeddings)
-
-    crawled_docs = crawl_sitemap(sitemap_url, config.crawling)
+    crawled_docs = list(crawled_docs)
     if not crawled_docs:
-        raise RuntimeError("No se recuperaron páginas desde el sitemap.")
+        raise RuntimeError("No se recuperaron páginas para la ingesta.")
 
     print(f"Documentos crawlerados: {len(crawled_docs)}")
 
@@ -135,3 +133,23 @@ def rebuild_rag_from_sitemap(
     manager.teardown()
 
     return IngestionSummary(documents=len(doc_rows), chunks=len(chunk_rows))
+
+
+def rebuild_rag_from_sitemap(
+    sitemap_url: str,
+    config: AppConfig,
+    embedder: Optional[EmbeddingProvider] = None,
+) -> IngestionSummary:
+    embedder = embedder or EmbeddingProvider(config.embeddings)
+    crawled_docs = crawl_sitemap(sitemap_url, config.crawling)
+    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder)
+
+
+def rebuild_rag_from_urls(
+    urls: Iterable[str],
+    config: AppConfig,
+    embedder: Optional[EmbeddingProvider] = None,
+) -> IngestionSummary:
+    embedder = embedder or EmbeddingProvider(config.embeddings)
+    crawled_docs = crawl_url_list(list(urls), config.crawling)
+    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder)

@@ -8,7 +8,7 @@ import asyncio
 import hashlib
 import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Sequence
 from urllib.parse import urlparse
 
 from tqdm import tqdm
@@ -184,4 +184,39 @@ def crawl_sitemap(sitemap_url: str, config: CrawlingConfig) -> List[CrawledDocum
     return asyncio.run(crawl_sitemap_async(sitemap_url, config))
 
 
-__all__ = ["CrawledDocument", "crawl_sitemap", "crawl_sitemap_async", "discover_urls_from_sitemap"]
+async def crawl_url_list_async(urls: Sequence[str], config: CrawlingConfig) -> List[CrawledDocument]:
+    cleaned_entries: List[Dict[str, str]] = []
+    for raw in urls:
+        candidate = (raw or "").strip()
+        if not candidate:
+            continue
+        if re.search(
+            r"\.(jpg|jpeg|png|gif|webp|svg|ico|pdf|zip|tar|gz|rar|7z|mp4|mp3|wav|avi|mov|xml)$",
+            candidate,
+            flags=re.I,
+        ):
+            continue
+        cleaned_entries.append({"url": candidate})
+    if not cleaned_entries:
+        raise RuntimeError("La lista de URLs no contiene entradas válidas.")
+    return await crawl_urls_to_markdown(cleaned_entries, config)
+
+
+def crawl_url_list(urls: Sequence[str], config: CrawlingConfig) -> List[CrawledDocument]:
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        loop = None
+    if loop and loop.is_running():
+        raise RuntimeError("crawl_url_list debe ejecutarse desde un contexto síncrono.")
+    return asyncio.run(crawl_url_list_async(list(urls), config))
+
+
+__all__ = [
+    "CrawledDocument",
+    "crawl_sitemap",
+    "crawl_sitemap_async",
+    "crawl_url_list",
+    "crawl_url_list_async",
+    "discover_urls_from_sitemap",
+]

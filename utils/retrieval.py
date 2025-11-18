@@ -42,6 +42,21 @@ class Retriever:
         self.config = config
         self.embedder = embedder
         self.reranker = reranker
+        self._fts_available: Optional[bool] = None
+
+    def _check_fts_available(self) -> bool:
+        if self._fts_available is not None:
+            return self._fts_available
+        try:
+            row = self.connection.execute(
+                "SELECT 1 FROM information_schema.tables WHERE table_name = 'fts_main_chunks' LIMIT 1;"
+            ).fetchone()
+            self._fts_available = bool(row)
+        except Exception:
+            self._fts_available = False
+        if not self._fts_available:
+            logger.info("FTS no disponible; se usará fallback léxico basado en LIKE.")
+        return self._fts_available
 
     def _ensure_query(self, query: str) -> str:
         cleaned = (query or "").strip()
@@ -140,30 +155,35 @@ class Retriever:
     def _lexical_candidates(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         top = top_k or self.config.lexical_topk
         logger.debug("Búsqueda léxica: query=%s, top_k=%s", query, top)
-        try:
-            rows = self.connection.execute(
-                """
-                SELECT
-                    c.chunk_id,
-                    c.doc_id,
-                    d.url,
-                    d.title,
-                    c.section_path,
-                    c.position,
-                    c.text,
-                    fts_main_chunks.score AS score,
-                    c.embedding
-                FROM fts_main_chunks
-                JOIN chunks AS c ON c.rowid = fts_main_chunks.rowid
-                JOIN docs AS d ON d.doc_id = c.doc_id
-                WHERE fts_main_chunks.match_bm25(?)
-                ORDER BY bm25(fts_main_chunks) DESC
-                LIMIT ?
-                """,
-                [query, top],
-            ).fetchall()
-        except Exception:
-            logger.exception("Error usando FTS para la consulta léxica, aplicando fallback.")
+        rows: List[Any] = []
+        if self._check_fts_available():
+            try:
+                rows = self.connection.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        d.url,
+                        d.title,
+                        c.section_path,
+                        c.position,
+                        c.text,
+                        fts_main_chunks.score AS score,
+                        c.embedding
+                    FROM fts_main_chunks
+                    JOIN chunks AS c ON c.rowid = fts_main_chunks.rowid
+                    JOIN docs AS d ON d.doc_id = c.doc_id
+                    WHERE fts_main_chunks.match_bm25(?)
+                    ORDER BY bm25(fts_main_chunks) DESC
+                    LIMIT ?
+                    """,
+                    [query, top],
+                ).fetchall()
+            except Exception:
+                logger.warning("Error usando FTS para la consulta léxica; se usará fallback LIKE hasta reinicio.")
+                self._fts_available = False
+                rows = []
+        if not rows:
             # Fallback: si FTS no está disponible, usar un ranking simple por coincidencias LIKE
             tokens = [t for t in (query or "").lower().split() if t]
             if not tokens:

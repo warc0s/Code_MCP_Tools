@@ -1,5 +1,5 @@
 main:
-  mode: cloud
+  mode: local
 
 database:
   path: data/rag.duckdb
