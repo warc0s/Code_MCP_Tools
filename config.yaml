@@ -48,3 +48,7 @@ mcp:
     lexical_search: false
     hybrid_search: true
     chunks_by_url: true
+    cli_start: false
+    cli_send: false
+    cli_stop: false
+    cli_restart: false

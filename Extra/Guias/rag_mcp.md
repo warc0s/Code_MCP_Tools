@@ -27,7 +27,8 @@
 - `lexical_search`: BM25 vía `fts_main_chunks` + `bm25(...)`.
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
-- `fastmcp` publica los esquemas (`outputSchema`) a partir de la definición en `mcp/server.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
+- `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
+- `fastmcp` publica los esquemas (`outputSchema`) a partir de la definición en `rag_mcp/server.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante la sección `mcp.tools`, por ejemplo:
 - 
 - ```yaml
@@ -37,12 +38,16 @@
 -     lexical_search: false
 -     hybrid_search: true
 -     chunks_by_url: true
+-     cli_start: false
+-     cli_send: false
+-     cli_stop: false
+-     cli_restart: false
 - ```
 - 
 - Si no se especifica `mcp.tools`, se exponen todas las tools por defecto.
 
 ## Servidor MCP
-- Servidor `fastmcp` en HTTP (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `mcp/server.py`.
+- Servidor `fastmcp` en HTTP (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `rag_mcp/server.py`.
 - Usa el transporte HTTP/Streamable MCP de `fastmcp`; las peticiones se manejan a través de `tools/list` y `tools/call` sin endpoint FastAPI propio.
 - Se arranca desde la opción 2 del CLI; muestra la URL final (`http://127.0.0.1:PUERTO/mcp`) y mantiene la conexión DuckDB en modo solo lectura.
 - Requiere que la BBDD exista previamente.
@@ -68,7 +73,7 @@
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
-- `requirements.txt` incluye CPU libs, `fastmcp` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
+- `requirements.txt` incluye CPU libs, `fastmcp`, `pexpect` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración

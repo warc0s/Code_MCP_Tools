@@ -5,7 +5,7 @@ from pathlib import Path
 
 import duckdb
 
-from mcp.server import DEFAULT_HTTP_PATH, build_server, run_server
+from rag_mcp.server import DEFAULT_HTTP_PATH, build_server, run_server
 from utils.config import AppConfig
 from utils.database import read_metadata
 from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
