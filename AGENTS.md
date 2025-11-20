@@ -27,6 +27,7 @@
 - Antes de empezar cualquier tarea, recopila toda la información disponible sobre el repositorio: revisa, lee **todas** las guías de `Extra/Guias/`, inspecciona los archivos relevantes y confirma el estado actual antes de proponer o ejecutar cambios.
 - Itera siempre guiandote por las validaciones manuales y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
 - Una vez finalices la tarea que te ha encargado el usuario y se haya comprobado que es estable y valida, preguntale al usuario si debes hacer "git add ." y commit con un comentario aclaratorio de lo añadido. Tu jamás harás push, el usuario lo hace, solo debes add y commit. SIEMPRE ESPERANDO APROBACION DEL USUARIO.
+- No ejecutes comandos git (add, commit, reset, revert, etc.) salvo que el usuario lo pida explícitamente.
 - A la hora de añadir nuevas funciones y demas en 'utils', implementalas en el .py que consideres mas adecuado O BIEN escribe uno nuevo si ninguno se amolda a lo que vas a programar.
 - Nunca te identifiques como responsable ni menciones nombres de agentes (p.ej., Codex); enfócate en describir acciones y resultados.
 - La aplicación se ejecuta desde `app.py` y los imports estan en 'utils'. Respeta esto.

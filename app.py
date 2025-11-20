@@ -227,8 +227,17 @@ def start_server(config: AppConfig) -> None:
     retriever = Retriever(connection, config.retrieval, embedder, reranker=reranker)
     enabled_tools = None
     tools_config = getattr(config, "mcp", None)
-    if tools_config and tools_config.tools:
-        enabled_tools = [name for name, enabled in tools_config.tools.items() if enabled]
+    if tools_config:
+        selected_tools = None
+        if tools_config.tool_sets:
+            if tools_config.active_set and tools_config.active_set in tools_config.tool_sets:
+                selected_tools = tools_config.tool_sets.get(tools_config.active_set) or {}
+            elif "rag" in tools_config.tool_sets:
+                selected_tools = tools_config.tool_sets.get("rag") or {}
+        if selected_tools:
+            enabled_tools = [name for name, enabled in selected_tools.items() if enabled]
+        elif tools_config.tools:
+            enabled_tools = [name for name, enabled in tools_config.tools.items() if enabled]
     server = build_server(
         retriever=retriever,
         enabled_tools=enabled_tools,

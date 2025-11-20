@@ -84,6 +84,8 @@ class PolicyConfig:
 @dataclass(frozen=True)
 class MCPConfig:
     tools: Dict[str, bool] = field(default_factory=dict)
+    tool_sets: Dict[str, Dict[str, bool]] = field(default_factory=dict)
+    active_set: Optional[str] = None
 
 
 @dataclass(frozen=True)

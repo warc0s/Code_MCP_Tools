@@ -29,22 +29,25 @@
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
 - `fastmcp` publica los esquemas (`outputSchema`) a partir de la definición en `rag_mcp/server.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
-- Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante la sección `mcp.tools`, por ejemplo:
+- Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
 - 
 - ```yaml
 - mcp:
--   tools:
--     dense_search: false
--     lexical_search: false
--     hybrid_search: true
--     chunks_by_url: true
--     cli_start: false
--     cli_send: false
--     cli_stop: false
--     cli_restart: false
+-   active_set: rag
+-   tool_sets:
+-     rag:
+-       dense_search: false
+-       lexical_search: false
+-       hybrid_search: true
+-       chunks_by_url: true
+-     cli:
+-       cli_start: true
+-       cli_send: true
+-       cli_stop: true
+-       cli_restart: true
 - ```
 - 
-- Si no se especifica `mcp.tools`, se exponen todas las tools por defecto.
+- Usa `active_set` para elegir el conjunto expuesto; si no se especifica, se intentará usar `rag`. Si tampoco hay `tool_sets`, se exponen todas las tools por defecto.
 
 ## Servidor MCP
 - Servidor `fastmcp` en HTTP (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `rag_mcp/server.py`.

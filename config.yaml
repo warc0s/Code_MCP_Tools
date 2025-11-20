@@ -43,12 +43,15 @@ policy:
   force_english_queries: true
 
 mcp:
-  tools:
-    dense_search: false
-    lexical_search: false
-    hybrid_search: true
-    chunks_by_url: true
-    cli_start: false
-    cli_send: false
-    cli_stop: false
-    cli_restart: false
+  active_set: rag
+  tool_sets:
+    rag:
+      dense_search: false
+      lexical_search: false
+      hybrid_search: true
+      chunks_by_url: true
+    cli:
+      cli_start: true
+      cli_send: true
+      cli_stop: true
+      cli_restart: true
