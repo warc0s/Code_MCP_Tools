@@ -5,6 +5,7 @@ PyYAML
 sentence-transformers
 fastapi
 uvicorn
+fastmcp
 torch
 openai
 requests

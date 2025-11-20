@@ -1,30 +1,66 @@
 """
-Servidor MCP minimalista expuesto vía FastAPI.
+Servidor MCP basado en fastmcp para exponer búsquedas del RAG.
 """
 
 from __future__ import annotations
 
-import json
 import logging
 import os
-import uuid
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Set
 
-from fastapi import FastAPI, HTTPException, Request, Response
-from pydantic import BaseModel, Field
-
-from mcp.toolset import RAGToolset
+from fastmcp import FastMCP
 
 logger = logging.getLogger(__name__)
 
-JSON_RPC_VERSION = "2.0"
-PROTOCOL_VERSION = "2025-06-18"
+SEARCH_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "chunk_id": {"type": "string"},
+                    "doc_id": {"type": "string"},
+                    "url": {"type": "string"},
+                    "title": {"type": "string"},
+                    "section_path": {"type": "string"},
+                    "position": {"type": "integer"},
+                    "text": {"type": "string"},
+                    "score": {"type": "number"},
+                },
+                "required": ["chunk_id", "doc_id", "url", "text", "score"],
+            },
+        },
+    },
+    "required": ["results"],
+}
 
+CHUNK_OUTPUT_SCHEMA: Dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "chunk_id": {"type": "string"},
+                    "doc_id": {"type": "string"},
+                    "url": {"type": "string"},
+                    "title": {"type": "string"},
+                    "section_path": {"type": "string"},
+                    "position": {"type": "integer"},
+                    "text": {"type": "string"},
+                },
+                "required": ["chunk_id", "doc_id", "url", "text"],
+            },
+        },
+    },
+    "required": ["results"],
+}
 
-class ToolCall(BaseModel):
-    tool: str = Field(..., description="Nombre de la tool a ejecutar.")
-    arguments: Dict[str, object] = Field(default_factory=dict, description="Argumentos JSON que sigue el schema.")
+DEFAULT_HTTP_PATH = "/mcp"
 
 
 @dataclass
@@ -34,164 +70,100 @@ class ServerInfo:
     url: str
 
 
-def build_app(toolset: RAGToolset) -> FastAPI:
-    app = FastAPI(title="RAG MCP Server", version="0.1.0")
+def _register_tools(
+    server: FastMCP,
+    retriever,
+    enabled_tools: Optional[Set[str]] = None,
+) -> None:
+    def _is_enabled(name: str) -> bool:
+        return enabled_tools is None or name in enabled_tools
 
-    def _json_rpc_result(request_id: Optional[object], result: Dict[str, object]) -> object:
-        if request_id is None:
-            logger.debug("Petición sin id completada sin respuesta.")
-            return Response(status_code=204)
-        return {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "result": result}
+    def _wrap(results: List[Dict[str, Any]]) -> Dict[str, Any]:
+        return {"results": results}
 
-    def _json_rpc_error(request_id: Optional[object], code: int, message: str) -> object:
-        payload = {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "error": {"code": code, "message": message}}
-        logger.warning("JSON-RPC error code=%s message=%s", code, message)
-        return payload
+    if enabled_tools is not None:
+        disabled = {"dense_search", "lexical_search", "hybrid_search", "chunks_by_url"} - enabled_tools
+        if disabled:
+            logger.info("Tools MCP deshabilitadas por configuración: %s", ", ".join(sorted(disabled)))
 
-    @app.get("/health")
-    def healthcheck():
-        return {"status": "ok"}
+    if _is_enabled("dense_search"):
+        @server.tool(
+            name="dense_search",
+            title="Dense search",
+            description="Dense vector search using cosine similarity over the embedding index.",
+            output_schema=SEARCH_OUTPUT_SCHEMA,
+        )
+        def dense_search(query: str, top_k: Optional[int] = None) -> Dict[str, Any]:
+            logger.info("Tool dense_search invocada top_k=%s", top_k)
+            return _wrap(retriever.dense_search(query, top_k=top_k))
 
-    @app.get("/tools")
-    def list_tools():
-        tools: List[Dict[str, object]] = []
-        for name, spec in toolset.list_tools().items():
-            tools.append({"name": name, "description": spec["description"], "schema": spec["schema"]})
-        return {"tools": tools}
+    if _is_enabled("lexical_search"):
+        @server.tool(
+            name="lexical_search",
+            title="Lexical search",
+            description="Lexical BM25 search using DuckDB FTS.",
+            output_schema=SEARCH_OUTPUT_SCHEMA,
+        )
+        def lexical_search(query: str, top_k: Optional[int] = None) -> Dict[str, Any]:
+            logger.info("Tool lexical_search invocada top_k=%s", top_k)
+            return _wrap(retriever.lexical_search(query, top_k=top_k))
 
-    @app.post("/call")
-    def call_tool(payload: ToolCall):
-        logger.info("HTTP /call tool=%s", payload.tool)
-        try:
-            results = toolset.call(payload.tool, payload.arguments or {})
-        except ValueError as exc:
-            logger.warning("Tool '%s' rechazó los argumentos: %s", payload.tool, exc)
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except Exception as exc:
-            logger.exception("Error inesperado en tool '%s'", payload.tool)
-            raise HTTPException(status_code=500, detail=str(exc)) from exc
-        return {"tool": payload.tool, "results": results}
+    if _is_enabled("hybrid_search"):
+        @server.tool(
+            name="hybrid_search",
+            title="Hybrid search",
+            description="Hybrid dense+lexical search with score fusion, MMR and optional reranking.",
+            output_schema=SEARCH_OUTPUT_SCHEMA,
+        )
+        def hybrid_search(query: str, top_k: Optional[int] = None) -> Dict[str, Any]:
+            logger.info("Tool hybrid_search invocada top_k=%s", top_k)
+            return _wrap(retriever.hybrid_search(query, top_k=top_k))
 
-    @app.post("/")
-    async def json_rpc_endpoint(request: Request):
-        try:
-            payload = await request.json()
-        except Exception as exc:  # pragma: no cover - FastAPI maneja el parseo
-            logger.debug("Fallo parseando JSON-RPC: %s", exc)
-            return _json_rpc_error(None, -32700, "JSON inválido.")
-
-        if not isinstance(payload, dict):
-            return _json_rpc_error(None, -32600, "La petición JSON-RPC debe ser un objeto.")
-
-        logger.debug("Payload JSON-RPC recibido: %s", payload)
-        request_id = payload.get("id")
-        method = payload.get("method")
-        params = payload.get("params") or {}
-        version = payload.get("jsonrpc")
-
-        if version != JSON_RPC_VERSION:
-            return _json_rpc_error(request_id, -32600, "Versión JSON-RPC no soportada.")
-
-        if method is None:
-            return _json_rpc_error(request_id, -32600, "Falta el método en la petición JSON-RPC.")
-
-        if request_id is None and not method.startswith("notifications/"):
-            return Response(status_code=202)
-
-        if method == "initialize":
-            result = {
-                "protocolVersion": PROTOCOL_VERSION,
-                "serverInfo": {"name": "RAG MCP Server", "version": "0.1.0"},
-                "capabilities": {"tools": {"listChanged": False}},
-            }
-            return _json_rpc_result(request_id, result)
-
-        if method == "tools/list":
-            tools: List[Dict[str, object]] = []
-            for name, spec in toolset.list_tools().items():
-                tools.append(
-                    {
-                        "name": name,
-                        "description": spec["description"],
-                        "inputSchema": spec["schema"],
-                        **({"outputSchema": spec["output_schema"]} if "output_schema" in spec else {}),
-                        **({"title": spec["title"]} if "title" in spec else {}),
-                    }
-                )
-            return _json_rpc_result(request_id, {"tools": tools})
-
-        if method == "logging/setLevel":
-            level_name = (params or {}).get("level", "INFO")
-            numeric_level = getattr(logging, str(level_name).upper(), logging.INFO)
-            logging.getLogger().setLevel(numeric_level)
-            logger.info("Nivel de logging ajustado a %s (%s)", level_name, numeric_level)
-            return _json_rpc_result(request_id, {})
-
-        if method == "tools/call":
-            tool_name = params.get("name")
-            arguments = params.get("arguments") or {}
-            tool_call_id = params.get("toolCallId") or str(uuid.uuid4())
-            if not tool_name:
-                return _json_rpc_error(request_id, -32602, "Falta el nombre de la tool en params.name.")
-            logger.info("JSON-RPC tools/call tool=%s toolCallId=%s", tool_name, tool_call_id)
-            try:
-                results = toolset.call(tool_name, arguments)
-            except ValueError as exc:
-                logger.warning("Tool '%s' rechazó los argumentos JSON-RPC: %s", tool_name, exc)
-                return _json_rpc_error(request_id, -32602, str(exc))
-            except Exception as exc:  # pragma: no cover - logging para fallos inesperados
-                logger.exception("Error inesperado ejecutando tool %s", tool_name)
-                return _json_rpc_error(request_id, -32000, f"Error interno: {exc}")
-            logger.debug(
-                "JSON-RPC tool=%s toolCallId=%s devolvió %d registros.",
-                tool_name,
-                tool_call_id,
-                len(results) if isinstance(results, list) else -1,
-            )
-            result_payload: Dict[str, object] = {
-                "content": [
-                    {
-                        "type": "text",
-                        "text": json.dumps({"results": results}, ensure_ascii=False),
-                    }
-                ],
-                "structuredContent": {"results": results},
-            }
-            result_payload["_meta"] = {"toolCallId": tool_call_id}
-            logger.debug("Payload de respuesta JSON-RPC: %s", result_payload)
-            return _json_rpc_result(request_id, result_payload)
-
-        if method.startswith("notifications/"):
-            return Response(status_code=202)
-
-        if method == "ping":
-            return _json_rpc_result(request_id, {"ok": True})
-
-        return _json_rpc_error(request_id, -32601, f"Método JSON-RPC no soportado: {method}")
-
-    return app
+    if _is_enabled("chunks_by_url"):
+        @server.tool(
+            name="chunks_by_url",
+            title="Chunks by URL",
+            description="Retrieve every chunk extracted from a given documentation URL.",
+            output_schema=CHUNK_OUTPUT_SCHEMA,
+        )
+        def chunks_by_url(url: str) -> Dict[str, Any]:
+            logger.info("Tool chunks_by_url invocada url=%s", url)
+            return _wrap(retriever.chunks_for_url(url))
 
 
-def run_server(toolset: RAGToolset, host: str = "127.0.0.1", port: int = 8000) -> ServerInfo:
-    import uvicorn
+def build_server(
+    retriever,
+    enabled_tools: Optional[Iterable[str]] = None,
+    name: str = "RAG MCP Server",
+) -> FastMCP:
+    enabled_set: Optional[Set[str]] = None
+    if enabled_tools:
+        enabled_set = {tool for tool in enabled_tools}
+        if not enabled_set:
+            enabled_set = None
+    server = FastMCP(name)
+    _register_tools(server, retriever, enabled_set)
+    return server
 
+
+def run_server(
+    server: FastMCP,
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    path: str = DEFAULT_HTTP_PATH,
+) -> ServerInfo:
     level_name = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, level_name, logging.INFO)
     if not isinstance(level, int):
         level = logging.INFO
-        level_name = "INFO"
     if not logging.getLogger().handlers:
         logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     else:
         logging.getLogger().setLevel(level)
 
-    app = build_app(toolset)
-    uvicorn_level = os.getenv("UVICORN_LOG_LEVEL", level_name.lower())
-    config = uvicorn.Config(app=app, host=host, port=port, log_level=uvicorn_level)
-    server = uvicorn.Server(config)
-    logger.info("Iniciando servidor MCP en %s:%s", host, port)
-    server.run()
-    return ServerInfo(host=host, port=port, url=f"http://{host}:{port}")
+    logger.info("Iniciando servidor fastmcp en %s:%s (path=%s)", host, port, path)
+    server.run(transport="http", host=host, port=port, path=path)
+    return ServerInfo(host=host, port=port, url=f"http://{host}:{port}{path}")
 
 
-__all__ = ["build_app", "run_server", "ServerInfo"]
+__all__ = ["build_server", "run_server", "ServerInfo", "DEFAULT_HTTP_PATH"]

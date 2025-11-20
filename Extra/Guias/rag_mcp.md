@@ -4,7 +4,7 @@
 - `config.yaml` centraliza rutas, chunking, retrieval y toggles (como MMR/reranker).
 - `utils/` aloja módulos independientes: `crawling`, `chunking`, `embeddings`, `database`, `pipeline`, `retrieval`, `reranker`.
 - La BBDD es DuckDB (`data/rag.duckdb`) con tablas `docs` y `chunks`, índices VSS (HNSW/cosine) y FTS (BM25).
-- `mcp/` contiene `toolset` (esquemas JSON de cada tool) y `server` (FastAPI + uvicorn).
+- `mcp/` define el servidor `fastmcp` y las tools declarativas en `server.py` (sin capa FastAPI manual).
 - `app.py` ofrece CLI: opción 1.x para reconstruir el RAG (desde sitemap o desde ficheros de URLs en `txt/`) y opción 2 para arrancar el servidor MCP.
 
 ## Modos de ejecución
@@ -27,7 +27,7 @@
 - `lexical_search`: BM25 vía `fts_main_chunks` + `bm25(...)`.
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
-- Cada tool valida payload vs JSON Schema y fuerza consultas ASCII si `policy.force_english_queries`.
+- `fastmcp` publica los esquemas (`outputSchema`) a partir de la definición en `mcp/server.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante la sección `mcp.tools`, por ejemplo:
 - 
 - ```yaml
@@ -42,20 +42,19 @@
 - Si no se especifica `mcp.tools`, se exponen todas las tools por defecto.
 
 ## Servidor MCP
-- API REST (`/health`, `/tools`, `/call`) servida con FastAPI.
-- `POST /` expone el endpoint JSON-RPC 2.0 con `initialize`, `tools/list` y `tools/call` para la compatibilidad con MCP Streamable HTTP.
-- Las notificaciones JSON-RPC (`notifications/initialized`) responden con `202 Accepted` y cuerpo vacío para mantener vivo al cliente Codex.
-- Arranca con `uvicorn` desde CLI opción 2 (puerto configurable). Muestra URL y deja logs.
+- Servidor `fastmcp` en HTTP (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `mcp/server.py`.
+- Usa el transporte HTTP/Streamable MCP de `fastmcp`; las peticiones se manejan a través de `tools/list` y `tools/call` sin endpoint FastAPI propio.
+- Se arranca desde la opción 2 del CLI; muestra la URL final (`http://127.0.0.1:PUERTO/mcp`) y mantiene la conexión DuckDB en modo solo lectura.
 - Requiere que la BBDD exista previamente.
 
 ## Integración con Codex CLI
-1. Arranca el servidor (`python app.py` → opción 2) para que escuche en `http://127.0.0.1:8000`.
+1. Arranca el servidor (`python app.py` → opción 2) para que escuche en `http://127.0.0.1:8000/mcp` (puerto configurable).
 2. Configura `~/.codex/config.toml` con:
    ```toml
    experimental_use_rmcp_client = true
 
    [mcp_servers.rag_local]
-   url = "http://127.0.0.1:8000"
+   url = "http://127.0.0.1:8000/mcp"
    startup_timeout_sec = 20
    tool_timeout_sec = 60
    ```
@@ -69,14 +68,12 @@
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
-- `requirements.txt` incluye CPU libs y los clientes remotos (`torch`, `sentence-transformers`, FastAPI, `openai`, `requests`, etc.).
+- `requirements.txt` incluye CPU libs, `fastmcp` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración
-- `mcp.server` arranca con nivel `INFO` por defecto (ajústalo con `LOG_LEVEL` si necesitas más o menos verbosidad) y registra cada tool solicitada, generando un `toolCallId` UUID cuando el cliente no envía uno y devolviendo `structuredContent` más un bloque `text` para maximizar compatibilidad con clientes MCP.
-- La ruta REST `/call` y el método JSON-RPC `tools/call` registran los argumentos rechazados y mantienen el stacktrace cuando ocurre un fallo interno.
-- `mcp.toolset` emite `DEBUG` por cada ejecución, informa cuántos resultados devolvió y deja constancia de validaciones rechazadas o errores.
-- `utils.retrieval` ahora deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
+- `mcp.server` inicializa `fastmcp` con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el framework serializa respuestas y schemas automáticamente.
+- `utils.retrieval` deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
 - Si prefieres menos ruido exporta `LOG_LEVEL=INFO` antes de lanzar `python app.py`.
 
 ## Cómo resetear la base de datos
@@ -86,9 +83,8 @@
 - El nuevo índice se rellena únicamente con los documentos obtenidos del sitemap (1.1) o de las URLs del fichero seleccionado en `txt/` (1.2), sustituyendo por completo a los anteriores.
 
 ### Conformidad MCP (junio 2025)
-- Desde 2025-06-18 la respuesta de `tools/call` coloca los resultados estructurados en `structuredContent` y deja `content` únicamente con un bloque `text` serializado con `json.dumps`. El identificador se expone en `_meta.toolCallId` para correlacionar trazas.
-- `tools/list` publica también `outputSchema` y `title` por tool para facilitar validaciones de clientes MCP.
-- El endpoint JSON-RPC acepta `logging/setLevel` y ajusta el nivel de la raíz de logging durante la sesión (útil para depurar sin reiniciar el servidor).
+- `fastmcp` expone por defecto `tools/list` (incluido `outputSchema`/`title`) y `tools/call` sobre HTTP/JSON-RPC compatible con los clientes MCP streamable.
+- Las respuestas incluyen `structuredContent` con el payload devuelto por cada tool y bloques `content` generados por el framework.
 
 ### Índices y compatibilidad DuckDB
 - VSS (HNSW): se intenta habilitar `hnsw_enable_experimental_persistence`. Si tu DuckDB/VSS no lo soporta, se omite el índice y la búsqueda densa funcionará igualmente (un poco más lenta) ordenando por `<->`.

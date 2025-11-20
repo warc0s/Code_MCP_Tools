@@ -5,8 +5,7 @@ from pathlib import Path
 
 import duckdb
 
-from mcp.server import run_server
-from mcp.toolset import RAGToolset
+from mcp.server import DEFAULT_HTTP_PATH, build_server, run_server
 from utils.config import AppConfig
 from utils.database import read_metadata
 from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
@@ -221,11 +220,14 @@ def start_server(config: AppConfig) -> None:
     tools_config = getattr(config, "mcp", None)
     if tools_config and tools_config.tools:
         enabled_tools = [name for name, enabled in tools_config.tools.items() if enabled]
-    toolset = RAGToolset(
+    server = build_server(
         retriever=retriever,
-        force_english_queries=config.policy.force_english_queries,
         enabled_tools=enabled_tools,
     )
+
+    http_path = os.getenv("MCP_HTTP_PATH", DEFAULT_HTTP_PATH)
+    if not http_path.startswith("/"):
+        http_path = f"/{http_path}"
 
     default_port = "8000"
     print(
@@ -236,9 +238,9 @@ def start_server(config: AppConfig) -> None:
     port_input = input(f"Puerto para el servidor MCP [{default_port}]: ").strip()
     port = int(port_input) if port_input else int(default_port)
     host = "127.0.0.1"
-    print(f"Iniciando servidor MCP en http://{host}:{port}")
+    print(f"Iniciando servidor MCP en http://{host}:{port}{http_path}")
     try:
-        run_server(toolset, host=host, port=port)
+        run_server(server, host=host, port=port, path=http_path)
     finally:
         connection.close()
 
