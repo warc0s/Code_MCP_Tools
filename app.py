@@ -238,7 +238,7 @@ def start_server(config: AppConfig) -> None:
     if not http_path.startswith("/"):
         http_path = f"/{http_path}"
 
-    default_port = "8000"
+    default_port = "8001"
     print(
         f"Modo de operación: {config.main.mode} | "
         f"Embeddings: {current_models['embedding']} | "
