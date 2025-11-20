@@ -61,13 +61,38 @@ def option_logs() -> None:
     print("Se generarán varios logs de ejemplo. Espera un momento...")
     for step in steps:
         logging.info("Paso: %s", step)
-        time.sleep(0.2)
+        time.sleep(random.uniform(0.1, 0.4))
     for idx in range(3):
         value = random.randint(1, 100)
         logging.debug("Valor aleatorio %s: %s", idx, value)
     logging.warning("Advertencia de prueba: esto es solo un test.")
     logging.error("Error de prueba: simulación controlada.")
     print("Logs generados. Revisa la salida para validar captura.")
+
+
+def option_slow_bursty_logs() -> None:
+    print("Simulando proceso largo con logs a trompicones...")
+    phases: List[str] = [
+        "Arrancando workers",
+        "Recopilando datos",
+        "Calculando métricas",
+        "Enviando resultados",
+    ]
+    for idx, phase in enumerate(phases, start=1):
+        logging.info("Fase %s: %s", idx, phase)
+        time.sleep(0.8)
+        if phase == "Recopilando datos":
+            logging.warning("Cola de mensajes creciendo, latencia moderada.")
+        if phase == "Calculando métricas":
+            logging.debug("Batch parcial listo. Esperando siguiente lote.")
+            time.sleep(1.5)
+        time.sleep(0.6)
+    logging.info("Postprocesado final en curso...")
+    for _ in range(3):
+        logging.debug("Pulso de vida %s", random.randint(10_000, 99_999))
+        time.sleep(random.uniform(0.5, 1.2))
+    logging.error("Fallo simulado: dependencia externa no respondió a tiempo.")
+    print("Proceso largo finalizado con errores simulados. Revisa la salida completa.")
 
 
 def option_submenu() -> None:
@@ -101,6 +126,7 @@ def main() -> None:
         print("2) Elegir color")
         print("3) Generar logs de ejemplo")
         print("4) Submenú de flujo")
+        print("5) Proceso lento con logs a trompicones")
         print("q) Salir")
         choice = prompt_input("> ")
         if choice == "1":
@@ -111,6 +137,8 @@ def main() -> None:
             option_logs()
         elif choice == "4":
             option_submenu()
+        elif choice == "5":
+            option_slow_bursty_logs()
         elif choice.lower() in {"q", "quit", "exit"}:
             print("Hasta luego y gracias por probar.")
             break

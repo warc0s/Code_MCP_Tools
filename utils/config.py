@@ -86,6 +86,7 @@ class MCPConfig:
     tools: Dict[str, bool] = field(default_factory=dict)
     tool_sets: Dict[str, Dict[str, bool]] = field(default_factory=dict)
     active_set: Optional[str] = None
+    cli_logs_enabled: bool = True
 
 
 @dataclass(frozen=True)

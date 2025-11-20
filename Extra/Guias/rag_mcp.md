@@ -4,7 +4,7 @@
 - `config.yaml` centraliza rutas, chunking, retrieval y toggles (como MMR/reranker).
 - `utils/` aloja módulos independientes: `crawling`, `chunking`, `embeddings`, `database`, `pipeline`, `retrieval`, `reranker`.
 - La BBDD es DuckDB (`data/rag.duckdb`) con tablas `docs` y `chunks`, índices VSS (HNSW/cosine) y FTS (BM25).
-- `mcp/` define el servidor `fastmcp` y las tools declarativas en `server.py` (sin capa FastAPI manual).
+- `rag_mcp/` define el servidor MCP basado en FastAPI y las tools declarativas en `server.py`.
 - `app.py` ofrece CLI: opción 1.x para reconstruir el RAG (desde sitemap o desde ficheros de URLs en `txt/`) y opción 2 para arrancar el servidor MCP.
 
 ## Modos de ejecución
@@ -28,7 +28,7 @@
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
-- `fastmcp` publica los esquemas (`outputSchema`) a partir de la definición en `rag_mcp/server.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
+- El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `rag_mcp/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
 - 
 - ```yaml
@@ -48,10 +48,27 @@
 - ```
 - 
 - Usa `active_set` para elegir el conjunto expuesto; si no se especifica, se intentará usar `rag`. Si tampoco hay `tool_sets`, se exponen todas las tools por defecto.
+-
+- Si quieres exponer a la vez las tools de RAG **y** las de CLI, puedes usar un mapa plano en `mcp.tools` en lugar de `tool_sets`, por ejemplo:
+-
+- ```yaml
+- mcp:
+-   tools:
+-     dense_search: false
+-     lexical_search: false
+-     hybrid_search: true
+-     chunks_by_url: true
+-     cli_start: true
+-     cli_send: true
+-     cli_stop: true
+-     cli_restart: true
+- ```
+-
+- En este modo, el servidor MCP registrará todas las tools marcadas como `true` en `mcp.tools` sin distinguir conjuntos.
 
 ## Servidor MCP
-- Servidor `fastmcp` en HTTP (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `rag_mcp/server.py`.
-- Usa el transporte HTTP/Streamable MCP de `fastmcp`; las peticiones se manejan a través de `tools/list` y `tools/call` sin endpoint FastAPI propio.
+- Servidor HTTP basado en FastAPI + uvicorn (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `rag_mcp/toolset.py`.
+- Implementa el protocolo MCP vía JSON‑RPC: maneja `initialize`, `tools/list`, `tools/call`, `logging/setLevel`, `ping` y notificaciones bajo la ruta configurada.
 - Se arranca desde la opción 2 del CLI; muestra la URL final (`http://127.0.0.1:PUERTO/mcp`) y mantiene la conexión DuckDB en modo solo lectura.
 - Requiere que la BBDD exista previamente.
 
@@ -76,11 +93,11 @@
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
 - El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
-- `requirements.txt` incluye CPU libs, `fastmcp`, `pexpect` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
+- `requirements.txt` incluye CPU libs, `fastapi`, `uvicorn`, `pexpect` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración
-- `mcp.server` inicializa `fastmcp` con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el framework serializa respuestas y schemas automáticamente.
+- `rag_mcp.server` inicializa FastAPI/uvicorn con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el servidor serializa respuestas y schemas MCP.
 - `utils.retrieval` deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
 - Si prefieres menos ruido exporta `LOG_LEVEL=INFO` antes de lanzar `python app.py`.
 
@@ -91,8 +108,8 @@
 - El nuevo índice se rellena únicamente con los documentos obtenidos del sitemap (1.1) o de las URLs del fichero seleccionado en `txt/` (1.2), sustituyendo por completo a los anteriores.
 
 ### Conformidad MCP (junio 2025)
-- `fastmcp` expone por defecto `tools/list` (incluido `outputSchema`/`title`) y `tools/call` sobre HTTP/JSON-RPC compatible con los clientes MCP streamable.
-- Las respuestas incluyen `structuredContent` con el payload devuelto por cada tool y bloques `content` generados por el framework.
+- El servidor FastAPI expone `tools/list` (incluido `outputSchema`/`title`) y `tools/call` sobre HTTP/JSON-RPC compatible con los clientes MCP streamable.
+- Las respuestas incluyen `structuredContent` con el payload devuelto por cada tool y bloques `content` con un JSON de resultados.
 
 ### Índices y compatibilidad DuckDB
 - VSS (HNSW): se intenta habilitar `hnsw_enable_experimental_persistence`. Si tu DuckDB/VSS no lo soporta, se omite el índice y la búsqueda densa funcionará igualmente (un poco más lenta) ordenando por `<->`.

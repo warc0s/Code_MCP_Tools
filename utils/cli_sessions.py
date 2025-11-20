@@ -50,20 +50,41 @@ def _detect_prompt(text: str) -> bool:
     return any(tail.endswith(suffix) for suffix in prompt_suffixes)
 
 
+def _build_status_hint(alive: bool, awaiting_input: bool) -> Dict[str, str]:
+    if not alive:
+        return {
+            "status_hint": "Sesión terminada.",
+            "next_step": "Reinicia con cli_restart o lanza una nueva con cli_start.",
+        }
+    if awaiting_input:
+        return {
+            "status_hint": "Esperando tu entrada.",
+            "next_step": "Envía la opción o comando con cli_send.",
+        }
+    return {
+        "status_hint": "Proceso en curso, aún no pide entrada.",
+        "next_step": "Llama de nuevo a cli_send (puede ser texto vacío) tras unos segundos para leer más salida.",
+    }
+
+
 @dataclass
 class CLISession:
     session_id: str
     command: str
+    conda_env: Optional[str]
     workdir: Optional[str]
     env: Dict[str, str]
     process: pexpect.spawn
     logfile_path: Path
+    log_enabled: bool
     created_at: float = field(default_factory=time.time)
 
     def is_alive(self) -> bool:
         return self.process.isalive()
 
     def append_log(self, text: str) -> None:
+        if not self.log_enabled:
+            return
         try:
             with self.logfile_path.open("a", encoding="utf-8") as handle:
                 handle.write(text)
@@ -101,7 +122,7 @@ def _drain_output(session: CLISession, timeout: float = 1.5, max_bytes: int = 16
             break
 
     text = "".join(output_chunks)
-    if text:
+    if text and session.log_enabled:
         session.append_log(text)
         awaiting_input = _detect_prompt(text)
     elif session.is_alive():
@@ -111,10 +132,12 @@ def _drain_output(session: CLISession, timeout: float = 1.5, max_bytes: int = 16
 
 def start_session(
     command: str,
+    conda_env: Optional[str] = None,
     workdir: Optional[str] = None,
     env: Optional[Dict[str, str]] = None,
     timeout: float = 1.5,
     max_bytes: int = 16000,
+    log_enabled: bool = True,
 ) -> Dict[str, object]:
     """
     Inicia una sesión CLI interactiva y devuelve la salida inicial.
@@ -122,14 +145,19 @@ def start_session(
     cleaned = (command or "").strip()
     if not cleaned:
         raise ValueError("Debes proporcionar un comando para iniciar la sesión.")
+    full_command = cleaned
+    if conda_env:
+        full_command = f"conda run -n {conda_env} {cleaned}"
 
     session_id = str(uuid.uuid4())
-    _ensure_log_dir()
-    log_path = LOG_DIR / f"{session_id}.log"
+    log_path = Path("")
+    if log_enabled:
+        _ensure_log_dir()
+        log_path = LOG_DIR / f"{session_id}.log"
 
     merged_env = _merge_env(env)
     proc = pexpect.spawn(
-        cleaned,
+        full_command,
         cwd=workdir or None,
         env=merged_env,
         encoding="utf-8",
@@ -138,19 +166,25 @@ def start_session(
     session = CLISession(
         session_id=session_id,
         command=cleaned,
+        conda_env=conda_env,
         workdir=workdir,
         env=env or {},
         process=proc,
         logfile_path=log_path,
+        log_enabled=log_enabled,
     )
     SESSIONS[session_id] = session
     output, awaiting_input = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+    alive = session.is_alive()
+    hints = _build_status_hint(alive=alive, awaiting_input=awaiting_input)
     return {
         "session_id": session_id,
         "output": output,
         "awaiting_input": awaiting_input,
-        "alive": session.is_alive(),
+        "alive": alive,
         "log_path": str(log_path),
+        "conda_env": conda_env or "",
+        **hints,
     }
 
 
@@ -165,21 +199,28 @@ def send_input(
         raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
     if not session.is_alive():
         output, _ = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+        hints = _build_status_hint(alive=False, awaiting_input=False)
         return {
             "session_id": session_id,
             "output": output,
             "awaiting_input": False,
             "alive": False,
             "log_path": str(session.logfile_path),
+            "conda_env": session.conda_env or "",
+            **hints,
         }
     session.process.sendline(text or "")
     output, awaiting_input = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+    alive = session.is_alive()
+    hints = _build_status_hint(alive=alive, awaiting_input=awaiting_input)
     return {
         "session_id": session_id,
         "output": output,
         "awaiting_input": awaiting_input,
-        "alive": session.is_alive(),
+        "alive": alive,
         "log_path": str(session.logfile_path),
+        "conda_env": session.conda_env or "",
+        **hints,
     }
 
 
@@ -197,12 +238,15 @@ def stop_session(session_id: str, kill: bool = False) -> Dict[str, object]:
             pass
     # Intentar drenar salida final
     output, _ = _drain_output(session, timeout=0.5, max_bytes=8000)
+    hints = _build_status_hint(alive=False, awaiting_input=False)
     return {
         "session_id": session_id,
         "output": output,
         "awaiting_input": False,
         "alive": session.is_alive(),
         "log_path": str(session.logfile_path),
+        "conda_env": session.conda_env or "",
+        **hints,
     }
 
 
@@ -217,6 +261,7 @@ def restart_session(
     stop_session(session_id, kill=False)
     return start_session(
         command=session.command,
+        conda_env=session.conda_env,
         workdir=session.workdir,
         env=session.env,
         timeout=timeout,

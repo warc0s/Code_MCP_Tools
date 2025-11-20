@@ -241,6 +241,7 @@ def start_server(config: AppConfig) -> None:
     server = build_server(
         retriever=retriever,
         enabled_tools=enabled_tools,
+        cli_logs_enabled=getattr(tools_config, "cli_logs_enabled", True),
     )
 
     http_path = os.getenv("MCP_HTTP_PATH", DEFAULT_HTTP_PATH)

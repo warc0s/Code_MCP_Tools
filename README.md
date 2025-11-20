@@ -6,7 +6,7 @@ VERSION ACTUAL: V2.5
 
 - Dualidad de modos `local` y `cloud` apuntalados por `config.yaml`, alternando entre modelos Qwen on-prem y endpoints OpenAI/DeepInfra sin tocar código.
 - Ingesta reforzada que normaliza embeddings, persiste metadatos de ejecución y reconstruye índices DuckDB (HNSW + FTS) listos para consultas híbridas con MMR y reranker.
-- Servidor MCP migrado a `fastmcp` (HTTP en `/mcp`) con tools declarativas, esquemas publicados automáticamente (`outputSchema`) y logging coherente para cada tool.
+- Servidor MCP basado en FastAPI + uvicorn (HTTP en `/mcp`) con tools declarativas, esquemas publicados automáticamente (`outputSchema`) y logging coherente para cada tool.
 - Tools MCP interactivas para controlar CLIs de texto (`cli_start`, `cli_send`, `cli_stop`, `cli_restart`) con logs por sesión en `data/cli_sessions/` (ver `Extra/Guias/cli_interactiva.md`).
 - Guía operativa actualizada en `Extra/Guias/rag_mcp.md` con arquitectura, logging, despliegue Codex CLI y notas de conformidad MCP 2025.
 - Nueva familia de opciones `1.x` en la CLI para reconstruir el RAG tanto desde un sitemap (1.1) como desde ficheros de URLs en la carpeta `txt/` (1.2), siempre reseteando la base de datos anterior.
@@ -33,7 +33,7 @@ Menú disponible:
    - 1.1) Desde sitemap: solicita la URL del sitemap, crawlea con Crawl4AI, hace chunking, genera embeddings y reconstruye `data/rag.duckdb`.  
    - 1.2) Desde fichero de URLs (`txt/`): lista los `.txt` en la carpeta `txt/`, cada uno con una URL por línea (se ignoran líneas vacías o que comiencen por `#`), crawlea esas páginas y reconstruye `data/rag.duckdb` con ellas.  
    - Cualquier opción 1.x elimina la base de datos actual y la recrea desde cero con los nuevos documentos.
-2. **Ejecutar servidor MCP**: levanta `fastmcp` sobre HTTP (`http://127.0.0.1:PUERTO/mcp`) con las tools habilitadas en `config.yaml`. Requiere haber corrido antes alguna opción 1.x.
+2. **Ejecutar servidor MCP**: levanta un servidor FastAPI/uvicorn sobre HTTP (`http://127.0.0.1:PUERTO/mcp`) con las tools habilitadas en `config.yaml`. Requiere haber corrido antes alguna opción 1.x.
 
 ## Pruebas
 
