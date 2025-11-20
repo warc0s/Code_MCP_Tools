@@ -2,10 +2,19 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+import warnings
 
 import duckdb
 
 from rag_mcp.server import DEFAULT_HTTP_PATH, build_server, run_server
+from pydantic.warnings import PydanticDeprecatedSince20
+
+# Filtra el warning de Pydantic generado por crawl4ai (Config en BaseModel).
+warnings.filterwarnings(
+    "ignore",
+    category=PydanticDeprecatedSince20,
+    module="pydantic._internal._config",
+)
 from utils.config import AppConfig
 from utils.database import read_metadata
 from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
