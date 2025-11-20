@@ -4,7 +4,7 @@
 - `config.yaml` centraliza rutas, chunking, retrieval y toggles (como MMR/reranker).
 - `utils/` aloja módulos independientes: `crawling`, `chunking`, `embeddings`, `database`, `pipeline`, `retrieval`, `reranker`.
 - La BBDD es DuckDB (`data/rag.duckdb`) con tablas `docs` y `chunks`, índices VSS (HNSW/cosine) y FTS (BM25).
-- `rag_mcp/` define el servidor MCP basado en FastAPI y las tools declarativas en `server.py`.
+- `mcp_server/` define el servidor MCP basado en FastAPI y las tools declarativas en `server.py`.
 - `app.py` ofrece CLI: opción 1.x para reconstruir el RAG (desde sitemap o desde ficheros de URLs en `txt/`) y opción 2 para arrancar el servidor MCP.
 
 ## Modos de ejecución
@@ -28,7 +28,7 @@
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
-- El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `rag_mcp/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
+- El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `mcp_server/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
 - 
 - ```yaml
@@ -67,7 +67,7 @@
 - En este modo, el servidor MCP registrará todas las tools marcadas como `true` en `mcp.tools` sin distinguir conjuntos.
 
 ## Servidor MCP
-- Servidor HTTP basado en FastAPI + uvicorn (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `rag_mcp/toolset.py`.
+- Servidor HTTP basado en FastAPI + uvicorn (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `mcp_server/toolset.py`.
 - Implementa el protocolo MCP vía JSON‑RPC: maneja `initialize`, `tools/list`, `tools/call`, `logging/setLevel`, `ping` y notificaciones bajo la ruta configurada.
 - Se arranca desde la opción 2 del CLI; muestra la URL final (`http://127.0.0.1:PUERTO/mcp`) y mantiene la conexión DuckDB en modo solo lectura.
 - Requiere que la BBDD exista previamente.
@@ -97,7 +97,7 @@
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración
-- `rag_mcp.server` inicializa FastAPI/uvicorn con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el servidor serializa respuestas y schemas MCP.
+- `mcp_server.server` inicializa FastAPI/uvicorn con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el servidor serializa respuestas y schemas MCP.
 - `utils.retrieval` deja trazas `DEBUG`/`INFO` sobre consultas densas/léxicas/híbridas, faltas de resultados y problemas generando embeddings o contra DuckDB.
 - Si prefieres menos ruido exporta `LOG_LEVEL=INFO` antes de lanzar `python app.py`.
 

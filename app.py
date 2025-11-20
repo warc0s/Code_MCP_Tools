@@ -6,7 +6,7 @@ import warnings
 
 import duckdb
 
-from rag_mcp.server import DEFAULT_HTTP_PATH, build_server, run_server
+from mcp_server.server import DEFAULT_HTTP_PATH, build_server, run_server
 from pydantic.warnings import PydanticDeprecatedSince20
 
 # Filtra el warning de Pydantic generado por crawl4ai (Config en BaseModel).

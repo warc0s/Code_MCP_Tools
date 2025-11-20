@@ -2,18 +2,20 @@
 
 VERSION ACTUAL: V2.5
 
+CLI y servidor MCP orientados a **coding**: exponen tools declarativas para RAG sobre documentación y para orquestar CLIs interactivas (por ejemplo `python app.py`) desde agentes/LLMs sin colgarse.
+
 ## Novedades principales de la V2.5
 
 - Dualidad de modos `local` y `cloud` apuntalados por `config.yaml`, alternando entre modelos Qwen on-prem y endpoints OpenAI/DeepInfra sin tocar código.
 - Ingesta reforzada que normaliza embeddings, persiste metadatos de ejecución y reconstruye índices DuckDB (HNSW + FTS) listos para consultas híbridas con MMR y reranker.
-- Servidor MCP basado en FastAPI + uvicorn (HTTP en `/mcp`) con tools declarativas, esquemas publicados automáticamente (`outputSchema`) y logging coherente para cada tool.
-- Tools MCP interactivas para controlar CLIs de texto (`cli_start`, `cli_send`, `cli_stop`, `cli_restart`) con logs por sesión en `data/cli_sessions/` (ver `Extra/Guias/cli_interactiva.md`).
-- Guía operativa actualizada en `Extra/Guias/rag_mcp.md` con arquitectura, logging, despliegue Codex CLI y notas de conformidad MCP 2025.
+- Servidor MCP basado en FastAPI + uvicorn (HTTP en `/mcp`) con tools declarativas pensadas para flujos de desarrollo: búsqueda en documentación técnica y control de CLIs de utilidades o tests.
+- Tools MCP interactivas para controlar CLIs de texto (`cli_start`, `cli_send`, `cli_stop`, `cli_restart`) con soporte de `conda_env`, `workdir` y timeouts afinables (ver `Extra/Guias/cli_interactiva.md`).
+- Guía operativa actualizada en `Extra/Guias/rag_mcp.md` con arquitectura, logging, despliegue Codex CLI y notas de conformidad MCP 2025 (servidor en `mcp_server/`).
 - Nueva familia de opciones `1.x` en la CLI para reconstruir el RAG tanto desde un sitemap (1.1) como desde ficheros de URLs en la carpeta `txt/` (1.2), siempre reseteando la base de datos anterior.
 - Al iniciar la CLI se muestra un resumen de la base de datos actual (ruta, número de documentos y algunas URLs de referencia) para recordar de “qué” son los documentos indexados.
-- Configuración MCP ampliada en `config.yaml` (`mcp.tools`) para activar o desactivar tools específicas del servidor (por ejemplo, exponer solo `hybrid_search` y `chunks_by_url` en producción).
+- Configuración MCP ampliada en `config.yaml` (`mcp.tools`, `mcp.cli_logs_enabled`) para activar/desactivar tools específicas del servidor y el logging de sesiones de CLI.
 
-CLI para construir un RAG “enchufable” basado en DuckDB + MCP.
+CLI para construir un RAG “enchufable” basado en DuckDB + MCP y exponerlo como servidor de herramientas para agentes centrados en código.
 
 ## Requisitos
 

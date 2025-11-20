@@ -14,7 +14,7 @@ from typing import Any, Dict, Iterable, Optional
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
-from rag_mcp.toolset import (
+from mcp_server.toolset import (
     CHUNK_OUTPUT_SCHEMA,
     INTERACTIVE_OUTPUT_SCHEMA,
     RAGToolset,
