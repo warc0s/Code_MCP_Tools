@@ -38,6 +38,7 @@ Si omites las claves `cli_*` quedarán deshabilitadas (cuando se usa `mcp.tools`
 - El detector de prompt es heurístico; si `awaiting_input=False` pero ves un prompt en `output`, el cliente debe decidir enviar igualmente.
 - Las rutas a scripts `.py` en el comando se resuelven de forma absoluta contra `workdir` y el `cwd` actual; si no existen se devuelve un error claro.
 - Las sesiones viven en memoria del proceso; si el servidor se reinicia, se pierden.
+- Las sesiones inactivas o muy antiguas (≥30 minutos) se limpian automáticamente para evitar fugas o bloqueos.
 - Controla los timeouts para evitar procesos colgados; el servidor aplica lecturas de salida limitadas a ~16KB por llamada.
 - Las respuestas devuelven `conda_env` (si se usó), `status_hint` y `next_step` para orientar el siguiente movimiento.
 - Si la salida muestra errores de dependencias (ModuleNotFound, import errors, binarios ausentes) o de red (DNS, SSL, conexión rechazada), `next_step` añade una pista para: (1) preguntar si debes usar otro entorno `conda` o instalar el paquete faltante, y (2) confirmar con el usuario si puede habilitarse el acceso a internet/LLM o lanzar con los permisos adecuados.

@@ -251,6 +251,21 @@ def _prepare_command(command: str, conda_env: Optional[str], workdir: Optional[s
     return "bash", ["-lc", base_cmd]
 
 
+def _cleanup_sessions(max_age_seconds: int = 1800) -> None:
+    """
+    Cierra procesos muertos o muy antiguos para evitar fugas y cuelgues.
+    """
+    now = time.time()
+    for session_id, session in list(SESSIONS.items()):
+        expired = (now - session.created_at) > max_age_seconds
+        if not session.is_alive() or expired:
+            try:
+                session.process.close(force=True)
+            except Exception:
+                pass
+            SESSIONS.pop(session_id, None)
+
+
 def _drain_output(session: CLISession, timeout: float = 1.5, max_bytes: int = 16000) -> Tuple[str, bool]:
     """
     Lee la salida disponible sin bloquear más allá del timeout.
@@ -299,6 +314,7 @@ def start_session(
     """
     Inicia una sesión CLI interactiva y devuelve la salida inicial.
     """
+    _cleanup_sessions()
     cleaned = (command or "").strip()
     if not cleaned:
         raise ValueError("Debes proporcionar un comando para iniciar la sesión.")
@@ -368,6 +384,7 @@ def send_input(
     timeout: float = 1.5,
     max_bytes: int = 16000,
 ) -> Dict[str, object]:
+    _cleanup_sessions()
     session = SESSIONS.get(session_id)
     if not session:
         raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
@@ -408,7 +425,7 @@ def send_input(
     }
 
 
-def stop_session(session_id: str, kill: bool = False) -> Dict[str, object]:
+def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict[str, object]:
     session = SESSIONS.get(session_id)
     if not session:
         raise ValueError("Sesión no encontrada.")
@@ -420,6 +437,15 @@ def stop_session(session_id: str, kill: bool = False) -> Dict[str, object]:
                 session.process.kill(signal.SIGINT)
         except Exception:
             pass
+        try:
+            session.process.close(force=True)
+        except Exception:
+            pass
+    else:
+        try:
+            session.process.close(force=True)
+        except Exception:
+            pass
     # Intentar drenar salida final
     output, _ = _drain_output(session, timeout=0.5, max_bytes=8000)
     hints = _enrich_hints(
@@ -427,6 +453,8 @@ def stop_session(session_id: str, kill: bool = False) -> Dict[str, object]:
         output,
         conda_env=session.conda_env,
     )
+    if drop:
+        SESSIONS.pop(session_id, None)
     return {
         "session_id": session_id,
         "output": output,
@@ -447,13 +475,20 @@ def restart_session(
     session = SESSIONS.get(session_id)
     if not session:
         raise ValueError("Sesión no encontrada.")
-    stop_session(session_id, kill=False)
+    original_command = session.command
+    original_conda = session.conda_env
+    original_workdir = session.workdir
+    original_env = session.env
+    original_batch = session.batch_queries
+    original_prompt = session.prompt_pattern
+    stop_session(session_id, kill=False, drop=True)
     return start_session(
-        command=session.command,
-        conda_env=session.conda_env,
-        workdir=session.workdir,
-        env=session.env,
-        batch_queries=session.batch_queries,
+        command=original_command,
+        conda_env=original_conda,
+        workdir=original_workdir,
+        env=original_env,
+        batch_queries=original_batch,
+        prompt_pattern=original_prompt,
         timeout=timeout,
         max_bytes=max_bytes,
     )
