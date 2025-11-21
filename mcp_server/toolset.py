@@ -67,6 +67,7 @@ INTERACTIVE_OUTPUT_SCHEMA: Dict[str, Any] = {
         "status_hint": {"type": "string"},
         "next_step": {"type": "string"},
         "conda_env": {"type": "string"},
+        "prompt_pattern": {"type": "string"},
     },
     "required": ["session_id", "output", "awaiting_input", "alive", "log_path"],
 }
@@ -146,6 +147,11 @@ class RAGToolset:
                         "command": {"type": "string"},
                         "conda_env": {"type": "string"},
                         "workdir": {"type": "string"},
+                        "batch_queries": {
+                            "type": "array",
+                            "items": {"type": "string"},
+                        },
+                        "prompt_pattern": {"type": "string"},
                         "timeout": {"type": "number", "minimum": 0},
                         "env": {"type": "object"},
                     },
@@ -243,6 +249,14 @@ class RAGToolset:
                 raise ValueError(f"'{key}' debe ser booleano.")
             if expected_type == "object" and not isinstance(value, dict):
                 raise ValueError(f"'{key}' debe ser un objeto.")
+            if expected_type == "array":
+                if not isinstance(value, list):
+                    raise ValueError(f"'{key}' debe ser una lista.")
+                item_type = prop.get("items", {}).get("type")
+                if item_type:
+                    for item in value:
+                        if item_type == "string" and not isinstance(item, str):
+                            raise ValueError(f"Cada elemento de '{key}' debe ser cadena.")
 
     def call(self, name: str, payload: Dict[str, Any]) -> Any:
         if name not in self._tools:
@@ -265,6 +279,8 @@ class RAGToolset:
                     command=payload["command"],
                     conda_env=payload.get("conda_env"),
                     workdir=payload.get("workdir"),
+                    batch_queries=payload.get("batch_queries"),
+                    prompt_pattern=payload.get("prompt_pattern"),
                     env=payload.get("env"),
                     timeout=float(payload.get("timeout", 1.5)),
                     log_enabled=self.cli_logs_enabled,

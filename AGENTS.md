@@ -8,6 +8,7 @@
 - **Work smart.** Ante bugs, retrocede, considera causas y añade logging para validar supuestos.
 - **Check your work.** Prueba cada bloque nuevo y, en procesos largos, revisa logs tras 30s para confirmar avance.
 - **Be cautious with terminal commands.** Lanza solo comandos que terminen solos; los persistentes van con `nohup` u otro wrapper y evita scripts colgados.
+- **Robustez total.** Cada solución debe contemplar explícitamente edge cases y fallos operativos; prioriza mensajes claros y defensivos ante dependencias, red o inputs inesperados.
 
 ## Coding Style & Naming Conventions
 - Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
