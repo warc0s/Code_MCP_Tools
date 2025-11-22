@@ -1,0 +1,213 @@
+import { getStatus, getDocs, getUrlFiles, rebuildSitemap as apiRebuildSitemap, rebuildFile as apiRebuildFile } from '../core/api.js';
+import { log } from '../core/logger.js';
+import { showToast } from '../core/toast.js';
+import { isValidUrl, setButtonLoading } from '../core/utils.js';
+import { state } from '../core/state.js';
+
+function updateStatusUI(data) {
+  const mode = document.getElementById('mode');
+  if (mode) mode.innerText = data.mode || '-';
+  const embedding = document.getElementById('embedding');
+  if (embedding) embedding.innerText = data.embedding || '-';
+  const reranker = document.getElementById('reranker');
+  if (reranker) reranker.innerText = data.reranker || '-';
+  const docsCount = document.getElementById('docs-count');
+  if (docsCount) docsCount.innerText = data.docs_count ?? '-';
+  const needsRebuild = document.getElementById('needs-rebuild');
+  if (needsRebuild) {
+    const wasHidden = needsRebuild.style.display === 'none';
+    needsRebuild.style.display = data.needs_rebuild ? 'block' : 'none';
+    if (data.needs_rebuild && wasHidden) needsRebuild.classList.add('reveal');
+  }
+  const list = document.getElementById('sample-urls');
+  if (list) {
+    list.innerHTML = '';
+    if ((data.sample_urls || []).length === 0) {
+      list.innerHTML = '<li style="color: var(--text-quaternary); font-style: italic;">No registered URLs</li>';
+    } else {
+      (data.sample_urls || []).forEach((u) => {
+        const li = document.createElement('li');
+        li.style.cssText = 'display: flex; align-items: start; gap: 8px; word-break: break-all;';
+        li.innerHTML = `<span style="color: var(--text-tertiary); flex-shrink: 0;">→</span><span style="flex: 1;">${u}</span>`;
+        list.appendChild(li);
+      });
+    }
+  }
+  const rebuildFlag = document.getElementById('rebuild-flag');
+  if (rebuildFlag) {
+    rebuildFlag.classList.toggle('hidden', !data.rebuild_running);
+    if (data.rebuild_running) rebuildFlag.classList.add('pulse'); else rebuildFlag.classList.remove('pulse');
+  }
+  const restartFlag = document.getElementById('restart-flag');
+  if (restartFlag) {
+    restartFlag.classList.toggle('hidden', !data.restart_required);
+    if (data.restart_required) restartFlag.classList.add('pulse'); else restartFlag.classList.remove('pulse');
+  }
+}
+
+export async function refreshStatus() {
+  log('Updating status...');
+  const data = await getStatus();
+  updateStatusUI(data);
+  if (state.statusAuto.active && !data.rebuild_running) {
+    setStatusAutoRefresh(false);
+    if (!state.statusAuto.notifiedDone) {
+      showToast('Index finished', 'success');
+      state.statusAuto.notifiedDone = true;
+    }
+  }
+}
+
+export async function refreshDocs() {
+  const data = await getDocs();
+  const tbody = document.getElementById('docs-table');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+  if ((data.docs || []).length === 0) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td colspan="4" style="text-align: center; padding: 48px 24px; color: var(--text-tertiary);">
+      <svg style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.4;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+      </svg>
+      <div style="font-size: 13px;">No documents indexed yet</div>
+      <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Use the Ingest tab to add documents</div>
+    </td>`;
+    tbody.appendChild(tr);
+    return;
+  }
+  data.docs.forEach((doc) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td style="font-family: 'SF Mono', Monaco, monospace; font-size: 11px; color: var(--text-secondary);">${doc.doc_id}</td><td style="color: var(--text-primary);">${doc.title || '-'}</td><td style="font-size: 12px; color: var(--text-tertiary); max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${doc.url || '-'}</td><td style="font-size: 12px; color: var(--text-quaternary);">${doc.created_at || '-'}</td>`;
+    tbody.appendChild(tr);
+  });
+}
+
+export async function refreshFiles() {
+  const data = await getUrlFiles();
+  const fills = ['file-select', 'file-select-ingesta'];
+  fills.forEach((id) => {
+    const select = document.getElementById(id);
+    if (!select) return;
+    select.innerHTML = '';
+    (data.files || []).forEach((f) => {
+      const opt = document.createElement('option');
+      opt.value = f; opt.text = f; select.appendChild(opt);
+    });
+  });
+}
+
+export function setStatusAutoRefresh(enable) {
+  const st = state.statusAuto;
+  if (enable) {
+    if (st.active && st.id) return;
+    st.active = true; st.notifiedDone = false;
+    try {
+      st.id = setInterval(() => { refreshStatus().catch(() => {}); }, 2000);
+    } catch (_) {
+      st.id = null; st.active = false;
+    }
+  } else {
+    if (st.id) {
+      try { clearInterval(st.id); } catch (_) { /* ignore */ }
+      st.id = null;
+    }
+    st.active = false;
+  }
+}
+
+export async function rebuildSitemap(event) {
+  const urlInput = document.getElementById('sitemap-url');
+  const url = urlInput?.value?.trim() || '';
+  if (!url) { showToast('You must specify a sitemap URL', 'error'); log('You must specify a sitemap'); return; }
+  if (!isValidUrl(url)) { showToast('Invalid URL format', 'error'); log('Invalid URL format'); return; }
+  const btn = event?.target;
+  setButtonLoading(btn, true);
+  showToast('Indexing started. Status will update every 2s…', 'success');
+  setStatusAutoRefresh(true);
+  try {
+    const data = await apiRebuildSitemap(url);
+    log(`Rebuilt: docs=${data.documents} chunks=${data.chunks}`);
+    showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
+    setStatusAutoRefresh(false); state.statusAuto.notifiedDone = true;
+    showIngestSummaryModal(data.documents, data.chunks);
+    refreshStatus();
+    refreshDocs();
+  } catch (e) {
+    log('Error rebuilding sitemap: ' + e.message);
+    showToast('Error rebuilding sitemap', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+export async function rebuildFile(event) {
+  const select = document.getElementById('file-select-ingesta') || document.getElementById('file-select');
+  const file = select?.value || '';
+  if (!file) { showToast('Please select a file', 'error'); log('Select a file'); return; }
+  const btn = event?.target;
+  setButtonLoading(btn, true);
+  showToast('Indexing started. Status will update every 2s…', 'success');
+  setStatusAutoRefresh(true);
+  try {
+    const data = await apiRebuildFile(file);
+    log(`Rebuilt: docs=${data.documents} chunks=${data.chunks}`);
+    showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
+    setStatusAutoRefresh(false); state.statusAuto.notifiedDone = true;
+    showIngestSummaryModal(data.documents, data.chunks);
+    refreshStatus();
+    refreshDocs();
+  } catch (e) {
+    log('Error rebuilding file: ' + e.message);
+    showToast('Error rebuilding from file', 'error');
+  } finally {
+    setButtonLoading(btn, false);
+  }
+}
+
+export function showIngestSummaryModal(documents, chunks) {
+  try {
+    const m = document.getElementById('ingest-modal');
+    if (!m) return;
+    const d = document.getElementById('ingest-documents-count');
+    const c = document.getElementById('ingest-chunks-count');
+    if (d) d.innerText = String(documents ?? 0);
+    if (c) c.innerText = String(chunks ?? 0);
+    m.classList.remove('hidden');
+  } catch (_) { /* ignore */ }
+}
+
+export function hideIngestSummaryModal() {
+  try { const m = document.getElementById('ingest-modal'); if (m) m.classList.add('hidden'); } catch (_) { /* ignore */ }
+}
+
+export function gotoRagDocs() {
+  try {
+    const ragTab = document.querySelector('.tab-btn[data-tab="rag"]');
+    if (ragTab) ragTab.click();
+    const docsBtn = document.querySelector('#tab-rag .tab-btn[data-subtab="rag-docs"]');
+    if (docsBtn) docsBtn.click();
+    setTimeout(() => { try { refreshDocs(); } catch (_) {} }, 50);
+  } catch (_) { /* ignore */ }
+}
+
+export function registerGlobals() {
+  window.refreshStatus = refreshStatus;
+  window.refreshDocs = refreshDocs;
+  window.refreshFiles = refreshFiles;
+  window.rebuildSitemap = rebuildSitemap;
+  window.rebuildFile = rebuildFile;
+  window.setStatusAutoRefresh = setStatusAutoRefresh;
+  window.showIngestSummaryModal = showIngestSummaryModal;
+  window.hideIngestSummaryModal = hideIngestSummaryModal;
+  window.gotoRagDocs = gotoRagDocs;
+}
+
+export async function init() {
+  await refreshStatus();
+  await refreshFiles();
+  await refreshDocs();
+}
+
+export function onShow() {
+  refreshStatus();
+}

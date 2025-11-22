@@ -1,0 +1,15 @@
+<!-- LOGS TAB -->
+      <div id="tab-log" class="tab-content hidden">
+        <div class="card">
+          <div class="card-title">Activity Log</div>
+          <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+            Shows UI client events (refreshes, saves, rebuilds). This is not the server log; for backend traces check the console where you launched `python app.py`.
+          </p>
+          <textarea id="log" class="input" style="height: 400px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; resize: none;" readonly placeholder="System events will appear here..."></textarea>
+          <div style="margin-top: 16px;">
+            <button class="ghost-btn" style="width: 100%;" onclick="clearLog()">Clear Log</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>

@@ -1,7 +1,7 @@
 from pathlib import Path
 
 
-def test_has_autorefresh_toggle():
-    html = Path("templates/index.html").read_text(encoding="utf-8")
-    assert "function setStatusAutoRefresh" in html
-    assert "__statusAuto" in html
+def test_status_auto_state_present():
+    js = Path("static/js/tabs/rag.js").read_text(encoding="utf-8")
+    assert "statusAuto" in Path("static/js/core/state.js").read_text(encoding="utf-8")
+    assert "setStatusAutoRefresh" in js

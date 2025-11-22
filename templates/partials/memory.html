@@ -1,0 +1,60 @@
+<!-- ITEMS TAB -->
+      <div id="tab-memory" class="tab-content hidden">
+        <div class="status-badge" style="background: rgba(148, 163, 184, 0.12); color: var(--text-secondary); border: 1px solid var(--border-secondary); margin-bottom: 12px;">
+          <svg class="icon-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7h18M3 12h18M3 17h18" />
+          </svg>
+          Memory is project-scoped. Select the active project in Configuration → Settings. RAG is global.
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 16px; padding: 8px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-primary); flex-wrap: wrap;">
+          <button class="tab-btn active" data-memtype="memory" onclick="setMemoryType('memory')">Memory</button>
+          <button class="tab-btn" data-memtype="doc" onclick="setMemoryType('doc')">Docs</button>
+          <button class="tab-btn" data-memtype="bug" onclick="setMemoryType('bug')">Bugs</button>
+          <button class="tab-btn" data-memtype="todo" onclick="setMemoryType('todo')">Todo</button>
+        </div>
+        <!-- Hidden input to keep backward compatibility for JS fetches -->
+        <input id="items-project" type="hidden" />
+
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 16px;">
+          <div class="card">
+            <div class="card-title">Create item</div>
+            <label class="label" for="item-type">Type (set by tab)</label>
+            <select id="item-type" class="input" disabled>
+              <option value="memory">memory</option>
+              <option value="doc">doc</option>
+              <option value="bug">bug</option>
+              <option value="todo">todo</option>
+            </select>
+            <label class="label" style="margin-top: 12px;" for="item-title">Title</label>
+            <input id="item-title" class="input" placeholder="Item title" />
+            <label class="label" style="margin-top: 12px;" for="item-status">Status (optional)</label>
+            <select id="item-status" class="input">
+              <option value="">(none)</option>
+            </select>
+            <label class="label" style="margin-top: 12px;" for="item-tags">Tags (comma separated)</label>
+            <input id="item-tags" class="input" placeholder="infra, backend, ui" />
+            <div style="display:flex; align-items:center; justify-content: space-between; margin-top: 12px;">
+              <label class="label" for="item-meta">Meta (JSON)</label>
+              <button class="ghost-btn" type="button" onclick="applyMetaTemplate()" title="Insert a template for this type">Use template</button>
+            </div>
+            <textarea id="item-meta" class="input" style="height: 120px;" placeholder='{"key":"value"}'></textarea>
+            <div id="meta-help-text" style="margin-top: 6px; font-size: 12px; color: var(--text-tertiary);"></div>
+            <label class="label" style="margin-top: 12px;" for="item-body">Body (markdown, optional)</label>
+            <textarea id="item-body" class="input" style="height: 120px;" placeholder="Contenido del item..."></textarea>
+            <div style="margin-top: 12px;">
+              <button class="primary-btn" style="width: 100%;" onclick="createItem()">Create item</button>
+            </div>
+          </div>
+        </div>
+        <div style="margin-top: 16px; display: grid; grid-template-columns: 1fr; gap: 16px;">
+          <div class="card">
+            <div class="card-title" id="items-title">Items</div>
+            <div style="display: flex; gap: 8px; margin-bottom: 10px;">
+              <button class="primary-btn" style="flex: 1;" onclick="refreshItems()">Refresh</button>
+              <button class="ghost-btn" onclick="clearItems()">Clear</button>
+            </div>
+            <div id="board" style="display: none; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px;"></div>
+            <div id="list" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px;"></div>
+          </div>
+        </div>
+      </div>

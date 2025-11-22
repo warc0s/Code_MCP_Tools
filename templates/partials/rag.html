@@ -1,0 +1,181 @@
+<!-- RAG TAB -->
+      <div id="tab-rag" class="tab-content hidden">
+        <!-- Sub-navigation for RAG sections -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px; padding: 8px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-primary);">
+          <button class="tab-btn active" data-subtab="rag-status">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Status
+          </button>
+          <button class="tab-btn" data-subtab="rag-ingest">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            Ingest
+          </button>
+          <button class="tab-btn" data-subtab="rag-docs">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            Documents
+          </button>
+          <button class="tab-btn" data-subtab="rag-settings">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            Settings
+          </button>
+        </div>
+
+        <!-- RAG Status Section -->
+        <div id="subtab-rag-status" class="subtab-content active">
+          <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+            Use these panes to check which URLs are indexed and which URL files are on disk. Data comes from the current DB (read-only); hit Refresh to query again.
+            <br/>
+            <strong style="color: var(--text-secondary);">Note:</strong> the RAG index is global (not project-scoped). Rebuilding replaces the global index.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px;">
+            <div class="card">
+              <div class="card-title">URL Files</div>
+              <label class="label" for="file-select">Select file</label>
+              <select id="file-select" class="input"></select>
+              <div style="margin-top: 12px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+                <p style="font-size: 11px; color: var(--text-tertiary);">
+                  One URL per line • <code style="color: var(--text-secondary);">#</code> for comments
+                </p>
+              </div>
+              <div style="margin-top: 16px;">
+                <button class="ghost-btn" style="width: 100%;" onclick="refreshFiles()">
+                  <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-title">Recent URLs</div>
+              <div style="padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+                <div style="font-size: 11px; color: var(--text-tertiary); font-weight: 500; margin-bottom: 8px;">INDEXED URLs</div>
+                <ul id="sample-urls" style="display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; font-size: 12px; color: var(--text-secondary);"></ul>
+              </div>
+              <div style="margin-top: 16px;">
+                <button class="ghost-btn" style="width: 100%;" onclick="refreshStatus()">
+                  <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Refresh
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RAG Ingest Section -->
+        <div id="subtab-rag-ingest" class="subtab-content hidden">
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px;">
+            <div class="card">
+              <div class="card-title">Sitemap Ingest</div>
+              <label class="label" for="sitemap-url">Sitemap XML URL</label>
+              <input id="sitemap-url" class="input" placeholder="https://domain.com/sitemap.xml" />
+              <div style="margin-top: 12px; padding: 10px 12px; background: rgba(217, 119, 6, 0.1); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 6px;">
+                <p style="font-size: 11px; color: #d97706; font-weight: 500;">
+                  ⚠ Replaces current index with sitemap content
+                </p>
+              </div>
+              <button class="primary-btn" style="margin-top: 16px; width: 100%;" onclick="rebuildSitemap()">
+                Index from Sitemap
+              </button>
+            </div>
+            <div class="card">
+              <div class="card-title">File Ingest</div>
+              <label class="label" for="file-select-ingesta">URL File (txt)</label>
+              <select id="file-select-ingesta" class="input"></select>
+              <div style="margin-top: 12px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+                <p style="font-size: 11px; color: var(--text-tertiary);">
+                  One URL per line • Empty lines and <code style="color: var(--text-secondary);">#</code> comments are ignored
+                </p>
+              </div>
+              <button class="primary-btn" style="margin-top: 16px; width: 100%;" onclick="rebuildFile()">
+                Index from File
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RAG Documents Section -->
+        <div id="subtab-rag-docs" class="subtab-content hidden">
+          <div class="card">
+            <div class="card-title">Indexed Documents</div>
+            <div style="overflow-x: auto; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Title</th>
+                    <th>URL</th>
+                    <th>Date</th>
+                  </tr>
+                </thead>
+                <tbody id="docs-table"></tbody>
+              </table>
+            </div>
+            <div style="margin-top: 16px;">
+              <button class="ghost-btn" style="width: 100%;" onclick="refreshDocs()">Refresh</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- RAG Settings Section -->
+        <div id="subtab-rag-settings" class="subtab-content hidden">
+          <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+            Adjust RAG execution mode and models; Save writes to <code style="color: var(--text-secondary);">config.yaml</code>.
+            These changes are not hot-applied: restart MCP and rebuild the index to use new models.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px;">
+            <div class="card">
+              <div class="card-title">Mode and Embeddings</div>
+              <label class="label" for="mode-select">Execution mode</label>
+              <select id="mode-select" class="input">
+                <option value="local">Local</option>
+                <option value="cloud">Cloud</option>
+              </select>
+              <label class="label" style="margin-top: 16px;" for="embedding-local">Local Embedding</label>
+              <input id="embedding-local" class="input" placeholder="Qwen/Qwen3-Embedding-0.6B" />
+              <label class="label" style="margin-top: 16px;" for="embedding-cloud">Cloud Embedding</label>
+              <input id="embedding-cloud" class="input" placeholder="text-embedding-3-small" />
+            </div>
+            <div class="card">
+              <div class="card-title">Reranker</div>
+              <label class="label" for="reranker-local">Local Reranker</label>
+              <input id="reranker-local" class="input" placeholder="Qwen/Qwen3-Reranker-0.6B" />
+              <label class="label" style="margin-top: 16px;" for="reranker-cloud">Cloud Reranker</label>
+              <input id="reranker-cloud" class="input" placeholder="Qwen/Qwen3-Reranker-8B" />
+              <div style="display: flex; align-items: center; gap: 8px; margin-top: 20px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+                <input type="checkbox" id="enable-rerank" />
+                <label for="enable-rerank" style="font-size: 13px; color: var(--text-primary); cursor: pointer;">Enable reranker</label>
+              </div>
+              <div style="margin-top: 12px; padding: 10px 12px; background: rgba(217, 119, 6, 0.1); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 6px;">
+                <p style="font-size: 11px; color: #d97706; font-weight: 500;">
+                  ⚠ Changing models/mode requires reindexing to apply changes
+                </p>
+              </div>
+              <div id="settings-restart-banner" class="status-badge hidden" style="margin-top: 12px; background: rgba(59, 130, 246, 0.15); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3);">
+                <svg class="icon-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Saved to config.yaml. Restart MCP to load settings.
+              </div>
+              <div id="needs-rebuild" style="display: none; margin-top: 12px; padding: 10px 12px; background: rgba(217, 119, 6, 0.15); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 6px; font-size: 12px; color: #d97706; font-weight: 600;">
+                Config changed; rebuild the index to apply changes
+              </div>
+            </div>
+          </div>
+          <div style="display: flex; gap: 8px; margin-top: 16px;">
+            <button class="primary-btn" style="flex: 1;" onclick="saveSettings()">Save</button>
+            <button class="ghost-btn" onclick="refreshSettings()">Reset</button>
+            <button class="ghost-btn" onclick="restartMcp(event)" title="Restart MCP server after persisting config">Restart MCP</button>
+          </div>
+        </div>
+      </div>

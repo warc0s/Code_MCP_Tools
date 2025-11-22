@@ -43,6 +43,12 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - En modo Docker, el botón **Restart MCP** ejecuta `docker restart <CONTAINER_NAME>` (por defecto `code-mcp-tools` en `docker-compose.yml`). También puedes reiniciar el contenedor a mano y consultar logs con `docker logs -f code-mcp-tools`.
   - Debes establecer `CONTAINER_NAME` (ya incluido en `docker-compose.yml`) para que el botón funcione; no hay fallback a relanzar subprocesos fuera de Docker.
 
+## Modularización reciente
+- HTML dividido: `templates/index.html` extiende `templates/base.html` e incluye pestañas en `templates/partials/`.
+- Estilos fuera del HTML: `static/css/app.css`.
+- JS por dominio: `static/js/main.js` (navegación/tabs) y módulos por pestaña en `static/js/tabs/` apoyados en helpers de `static/js/core/`.
+- Assets servidos vía `/static` montado en FastAPI; usa `url_for('static', path='...')` para referenciar CSS/JS.
+
 ## MCP
 - El servidor MCP comparte proceso FastAPI con la UI. Tools registradas según `config.yaml` o los toggles del panel.
 - Output JSON-RPC sigue igual (`tools/list`, `tools/call`), con `outputSchema` incluido.

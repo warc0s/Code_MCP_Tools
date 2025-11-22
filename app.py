@@ -16,6 +16,7 @@ import re
 import uvicorn
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from pydantic.warnings import PydanticDeprecatedSince20
 
 from mcp_server.server import DEFAULT_HTTP_PATH, build_app
@@ -411,6 +412,7 @@ def _run_rebuild_urls_file(filename: str, config: AppConfig):
 def create_web_app(state: AppState, base_path: str) -> FastAPI:
     app = build_app(state.toolset, base_path=base_path)
     templates = Jinja2Templates(directory="templates")
+    app.mount("/static", StaticFiles(directory="static"), name="static")
 
     @app.get("/")
     async def root(request: Request):
