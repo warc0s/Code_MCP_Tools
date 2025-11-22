@@ -9,11 +9,17 @@ Servidor MCP + panel web orientado a **coding**: expone tools declarativas para 
 - Panel web (`http://127.0.0.1:8000/`): pestañas de Dashboard, RAG, Tools MCP, Memory, Configuration y Logs.
   - Dashboard → Status: muestra modo/modelos, documentos, MCP URL completo, tools activas por grupo y contadores de Memory por proyecto seleccionado.
   - Dashboard → Integrations: instrucciones listas para pegar para Codex CLI, Claude Code y GitHub Copilot (VS Code), con URL actual y botones Copy.
-  - Dashboard → AGENTS.md: muestra las guidelines cargadas del backend.
+  - Dashboard → AGENTS.md: muestra las guidelines cargadas del backend. Incluye tarjetas informativas (no hay builder) para recordar qué secciones quitar/ajustar al copiar.
 - RAG: reconstrucción desde sitemap o ficheros `txt/` con recarga en caliente del retriever. Rebuild recrea `docs/chunks/metadata` en DuckDB, preservando `projects/items` que ahora viven en SQLite (`data/memory.sqlite3`). MCP expone `hybrid_search` y `chunks_by_url` (dense/lexical opcionales).
   - Nota: el índice RAG es global (no por proyecto). La memoria es por proyecto.
 - RAG → Settings: configuración de modo (`local`/`cloud`), embeddings y reranker; persiste en `config.yaml`, requiere Restart MCP y Rebuild del índice.
 - Items: tools MCP `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`, `delete_item`. UI Memory trabaja sobre el mismo servicio. Tipos: `memory`, `doc`, `bug`, `todo` con estados `pending` → `in_progress` → `to_verify` → `resolved`.
+  - Body editable en todos los tipos desde el editor inline de la UI.
+  - Arquitectura de metadatos simplificada:
+    - Campos obligatorios por tipo se envían en `typed` (p. ej., bug: `severity,reproduction,expected,root_cause`; todo: `kind,acceptance_criteria,priority`; memory: `topic,decision,context,rationale`; doc: `authors,related_docs` opcionales).
+    - `meta` (JSON) queda para extras opcionales (logs, screenshots, resolution_criteria, related_files, done_summary, etc.).
+    - Enforcement al resolver: bug/todo deben incluir `meta.done_summary` (≥120 chars) y `meta.related_files` (>=1).
+  - La UI muestra inputs tipados y deja `Meta (JSON)` como bloque avanzado (opcional); se autoaplica la plantilla al cambiar de subtipo.
 - Projects: creación idempotente desde Settings; botón Delete con doble confirmación; no se permite borrar el proyecto activo. Las tools ya no crean proyectos automáticamente (devuelven “Project not found”).
 - CLI: tools `cli_start`/`cli_send`/`cli_stop`/`cli_restart` para orquestar sesiones.
 - Robustez BD: borrado de proyectos en dos fases (items → proyecto) con FKs activas; sin parches de desactivar FKs.
@@ -88,11 +94,22 @@ docker compose up
 python -m pytest
 ```
 
-Valida RAG híbrido, BM25 (cuando FTS está disponible) y contrato MCP.
-Toda implementación nueva debe incluir un test en `test/` y no se considera lista hasta que pase en verde (AGENTS.md)
+Valida RAG híbrido, BM25 (cuando FTS está disponible), contrato MCP y modelos de meta por tipo.
+
+Política de validación dual (AGENTS.md):
+- Añade tests en `test/` y ejecuta `pytest` hasta verde.
+- Verifica manualmente en un Chrome real vía MCP Chrome DevTools los flujos tocados (crear/editar/borrar, drag-and-drop, rebuild, toggles), capturando errores de consola/red.
+
+Recomendación en bugs: logs y/o screenshots
+- Guarda capturas en `static/uploads/bugs/<slug>.png` y referencia `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png` en `meta.screenshots`.
+- `.gitignore` excluye `static/uploads/*` (se conserva `static/uploads/.gitkeep`).
+
+JSON Schema de items en tools MCP
+- `store_item` y `update_item` exponen `typed` (oneOf por tipo; requerido en `store_item` para memory/bug/todo) y `meta` (oneOf opcional). Los clientes pueden construir payloads válidos sin JSONs largos obligatorios.
 
 ## TODO / próximo
 
 - Mejorar soporte FTS/BM25 real en entornos donde la extensión falle (evitar fallback LIKE).
 - Forzar refresco de tools en clientes MCP al inicio de sesión.
 - (Opcional) Multi-corpus en la misma BD con filtrado por corpus en tools RAG.
+- (Opcional) Botón "Attach screenshot" en el editor inline que suba PNG a `static/uploads/bugs/` e inserte su URL en `meta.screenshots`.

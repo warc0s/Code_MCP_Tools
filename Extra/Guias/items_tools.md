@@ -7,15 +7,15 @@ Nota de ámbito: las tools de Items operan por proyecto. El índice RAG es globa
 - Desde la separación de BBDD, este esquema vive en SQLite (`memory_database.path`). Se crea automáticamente al arrancar. Los rebuild del RAG solo afectan a DuckDB (`docs/chunks/metadata`).
 
 ## Tipos y convenciones
-- `memory`: decisiones, invariantes, mapas mentales, guías internas para el agente.
-- `doc`: documentación markdown que antes viviría en `docs/`. Se versiona y se edita vía `patch_doc`.
-- `bug`: bug graveyard; usa `meta` para `severity`, `reproduction`, `logs_excerpt`, `root_cause`, `fix_summary`, `fixed_in_commit`.
-- `todo`: tareas (`meta.kind`: `bug_fix|refactor|feature|chore`, más `reproduction`, `acceptance_criteria`, `priority`).
+- `memory`: decisiones, invariantes, mapas mentales, guías internas para el agente. Campos obligatorios pasan a `typed` (topic, decision, context, rationale); `meta` queda para extras opcionales.
+- `doc`: documentación markdown que antes viviría en `docs/`. Se versiona y se edita vía `patch_doc`. `typed` expone `authors` y `related_docs` (opcionales); el resto va en `meta` opcional.
+- `bug`: bug graveyard; campos obligatorios pasan a `typed` (`severity`, `reproduction`, `expected`, `root_cause`). `meta` se usa para extras (logs_excerpt, resolution_criteria, screenshots, related_files, done_summary, etc.).
+- `todo`: tareas; campos obligatorios pasan a `typed` (`kind`, `acceptance_criteria`, `priority`). `meta` opcional para `dependencies`, `related_files`, `done_summary`, etc.
 - `tags` y `status` se normalizan en minúsculas; `status` solo admite `pending`, `in_progress`, `to_verify`, `resolved`. `project` puede ser slug o `project_id`. Nota: ya no se crean proyectos automáticamente.
 
 ## Tools MCP nuevas
-- `store_item(project?, project_id?, type, title, body_md?, tags?, status?, meta?)` → crea item (versión 1). Requiere que el proyecto exista.
-- `update_item(project?, project_id?, id, fields)` → actualiza metadatos (`title`, `tags`, `status`, `meta`) y sube `version`.
+- `store_item(project?, project_id?, type, title, body_md?, tags?, status?, meta?, typed?)` → crea item. `typed` recoge los campos obligatorios por tipo; `meta` es opcional para extras.
+- `update_item(project?, project_id?, id, fields)` → actualiza `title`, `tags`, `status`, `meta` (opc) y `typed` (parcial) y sube `version`.
 - `get_item(project?, project_id?, id)` → item único.
 - `list_items(project?, project_id?, type?, status?, tags?, limit=50)` → listado filtrado, ordenado por `updated_at`.
 - `search_items(project?, project_id?, query, type?, tags?, limit=50)` → búsqueda básica sobre `title`, `body_md` y `meta`.
@@ -31,8 +31,9 @@ Nota avanzada: DuckDB no soporta `ON DELETE CASCADE`. El backend realiza el borr
 
 Notas:
 - Usa siempre `project` o `project_id` (al menos uno) en cada tool. Si el proyecto no existe, las tools devolverán error de "Project not found"; créalo primero desde la UI (Projects) o mediante el endpoint `/ui/api/projects`.
+- `typed` es obligatorio en `store_item` para `memory`, `bug` y `todo` (se acepta fallback desde `meta` por compatibilidad). Para `doc` es opcional.
 - `patch_doc` valida `expected_version` si se pasa; falla si no coincide o si el diff no aplica al cuerpo actual.
-- La salida devuelve `project_slug`, `project_name`, `version` y las marcas temporales para poder auditar o reintentar.
+- La salida devuelve `project_slug`, `project_name`, `version` y las marcas temporales; `item.typed` incluye los campos tipados persistidos.
 
 ### Ejemplo de `unified_diff` para `patch_doc`
 

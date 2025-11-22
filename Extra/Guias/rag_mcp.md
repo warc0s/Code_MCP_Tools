@@ -35,7 +35,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
-- `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`: tools para gestionar items por proyecto (memorias/docs/bugs/todos) con edición de docs por diff.
+- `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`: tools para gestionar items por proyecto (memorias/docs/bugs/todos). `store_item`/`update_item` aceptan `typed` (campos obligatorios por tipo) y `meta` opcional; `patch_doc` edita docs por diff.
 - El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `mcp_server/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
 - 

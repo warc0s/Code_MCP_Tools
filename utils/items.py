@@ -13,7 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import sqlite3
 
 from utils.config import MemoryDatabaseConfig
-from utils.item_meta import validate_meta
+from utils.item_meta import validate_meta, validate_typed_required
 
 ALLOWED_ITEM_TYPES = {"memory", "doc", "bug", "todo"}
 ALLOWED_STATUSES = {"pending", "in_progress", "to_verify", "resolved"}
@@ -31,6 +31,7 @@ class ItemRecord:
     tags: List[str]
     status: Optional[str]
     meta: Dict[str, Any]
+    typed: Dict[str, Any]
     version: int
     created_at: str
     updated_at: str
@@ -60,7 +61,7 @@ def _validate_status(status: Optional[str]) -> Optional[str]:
         return None
     if normalized not in ALLOWED_STATUSES:
         raise ValueError(
-            f"status debe ser uno de {', '.join(sorted(ALLOWED_STATUSES))}."
+            f"status must be one of {', '.join(sorted(ALLOWED_STATUSES))}."
         )
     return normalized
 
@@ -87,7 +88,7 @@ def apply_unified_diff(original: str, diff_text: str) -> str:
     Levanta ValueError si el diff no aplica limpiamente.
     """
     if not diff_text.strip():
-        raise ValueError("El diff proporcionado está vacío.")
+        raise ValueError("Provided diff is empty.")
     orig_lines = original.splitlines(keepends=True)
     diff_lines = diff_text.splitlines(keepends=True)
     output: list[str] = []
@@ -107,13 +108,13 @@ def apply_unified_diff(original: str, diff_text: str) -> str:
             continue
         header = line.strip().split()
         if len(header) < 3:
-            raise ValueError("Hunk de diff inválido.")
+            raise ValueError("Invalid diff hunk header.")
         old_range = header[1][1:]
         start_old, _ = parse_range(old_range)
         # Copia el bloque previo sin cambios
         target_idx = max(0, start_old - 1)
         if target_idx > len(orig_lines):
-            raise ValueError("El diff apunta fuera del texto original.")
+            raise ValueError("Diff points outside the original text.")
         output.extend(orig_lines[orig_idx:target_idx])
         orig_idx = target_idx
         i += 1
@@ -121,28 +122,28 @@ def apply_unified_diff(original: str, diff_text: str) -> str:
             current = diff_lines[i]
             if current.startswith(" "):
                 if orig_idx >= len(orig_lines):
-                    raise ValueError("El diff no coincide con el texto base (contexto insuficiente).")
+                    raise ValueError("Diff does not match base text (insufficient context).")
                 expected = orig_lines[orig_idx]
                 candidate = current[1:]
                 if expected != candidate:
-                    raise ValueError("El diff no coincide con el texto base (contexto distinto).")
+                    raise ValueError("Diff does not match base text (different context).")
                 output.append(expected)
                 orig_idx += 1
             elif current.startswith("-"):
                 if orig_idx >= len(orig_lines):
-                    raise ValueError("El diff elimina líneas que no existen en el original.")
+                    raise ValueError("Diff deletes lines that do not exist in original.")
                 expected = orig_lines[orig_idx]
                 candidate = current[1:]
                 if expected != candidate:
-                    raise ValueError("El diff no coincide con el texto base (línea a eliminar).")
+                    raise ValueError("Diff does not match base text (line to remove).")
                 orig_idx += 1
             elif current.startswith("+"):
                 output.append(current[1:])
             elif current.startswith("\\"):
-                # Línea '\ No newline at end of file' u otras anotaciones: se ignoran
+                # Line '\ No newline at end of file' or other annotations: ignore
                 pass
             else:
-                raise ValueError("Diff con prefijo de línea desconocido.")
+                raise ValueError("Diff with unknown line prefix.")
             i += 1
     output.extend(orig_lines[orig_idx:])
     return "".join(output)
@@ -200,7 +201,7 @@ class ItemService:
         """
         slug = _slugify(slug_or_name or "")
         if not slug:
-            raise ValueError("Debes indicar un slug válido.")
+            raise ValueError("You must provide a valid slug.")
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT id, slug, name, created_at FROM projects WHERE slug = ? LIMIT 1;",
@@ -292,6 +293,20 @@ class ItemService:
             tags,
             status,
             meta,
+            memory_topic,
+            memory_decision,
+            memory_context,
+            memory_rationale,
+            memory_related_links,
+            doc_authors,
+            doc_related_docs,
+            bug_severity,
+            bug_reproduction,
+            bug_expected,
+            bug_root_cause,
+            todo_kind,
+            todo_acceptance_criteria,
+            todo_priority,
             version,
             created_at,
             updated_at,
@@ -302,6 +317,35 @@ class ItemService:
         meta_data = _parse_json(meta, {})
         if not isinstance(meta_data, dict):
             meta_data = {}
+
+        # Build typed dict per type
+        typed: Dict[str, Any] = {}
+        if item_type == "memory":
+            typed = {
+                "topic": memory_topic or "",
+                "decision": memory_decision or "",
+                "context": memory_context or "",
+                "rationale": memory_rationale or "",
+                "related_links": _parse_json(memory_related_links, []),
+            }
+        elif item_type == "doc":
+            typed = {
+                "authors": _parse_json(doc_authors, []),
+                "related_docs": _parse_json(doc_related_docs, []),
+            }
+        elif item_type == "bug":
+            typed = {
+                "severity": bug_severity or "",
+                "reproduction": bug_reproduction or "",
+                "expected": bug_expected or "",
+                "root_cause": bug_root_cause or "",
+            }
+        elif item_type == "todo":
+            typed = {
+                "kind": todo_kind or "",
+                "acceptance_criteria": _parse_json(todo_acceptance_criteria, []),
+                "priority": todo_priority or "",
+            }
 
         return ItemRecord(
             id=item_id,
@@ -314,6 +358,7 @@ class ItemService:
             tags=tags_data,
             status=status,
             meta=meta_data,
+            typed=typed,
             version=int(version),
             created_at=str(created_at),
             updated_at=str(updated_at),
@@ -329,6 +374,7 @@ class ItemService:
         tags: Optional[Iterable[str]] = None,
         status: Optional[str] = None,
         meta: Optional[Dict[str, Any]] = None,
+        typed: Optional[Dict[str, Any]] = None,
     ) -> ItemRecord:
         if item_type not in ALLOWED_ITEM_TYPES:
             raise ValueError("Unsupported item type.")
@@ -339,13 +385,49 @@ class ItemService:
         # Require an existing project; do not auto-create on store
         project_db_id, project_slug, project_name = self._ensure_project(project, project_id, create_missing=False)
         item_id = uuid.uuid4().hex
-        # Validate and normalize meta against pydantic models per type
-        payload_meta = validate_meta(item_type, meta or {})
+        # Prepare typed payload (fallback from meta for backward compatibility)
+        meta_obj = meta or {}
+        typed_payload = dict(typed or {})
+        if not typed_payload and isinstance(meta_obj, dict):
+            if item_type == "memory":
+                for k in ("topic", "decision", "context", "rationale", "related_links"):
+                    if k in meta_obj:
+                        typed_payload[k] = meta_obj.get(k)
+            elif item_type == "bug":
+                for k in ("severity", "reproduction", "expected", "root_cause"):
+                    if k in meta_obj:
+                        typed_payload[k] = meta_obj.get(k)
+            elif item_type == "todo":
+                for k in ("kind", "acceptance_criteria", "priority"):
+                    if k in meta_obj:
+                        typed_payload[k] = meta_obj.get(k)
+            elif item_type == "doc":
+                for k in ("authors", "related_docs"):
+                    if k in meta_obj:
+                        typed_payload[k] = meta_obj.get(k)
+        # Validate typed required fields
+        normalized_typed = validate_typed_required(item_type, typed_payload)
+        # Validate and normalize meta (optional extras)
+        payload_meta = validate_meta(item_type, meta_obj)
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT INTO items (id, project_id, type, title, body_md, tags, status, meta, version)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1);
+                INSERT INTO items (
+                    id, project_id, type, title, body_md, tags, status, meta,
+                    memory_topic, memory_decision, memory_context, memory_rationale, memory_related_links,
+                    doc_authors, doc_related_docs,
+                    bug_severity, bug_reproduction, bug_expected, bug_root_cause,
+                    todo_kind, todo_acceptance_criteria, todo_priority,
+                    version
+                )
+                VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?,
+                    ?, ?,
+                    ?, ?, ?, ?,
+                    ?, ?, ?,
+                    1
+                );
                 """,
                 [
                     item_id,
@@ -356,6 +438,24 @@ class ItemService:
                     json.dumps(normalized_tags),
                     normalized_status,
                     json.dumps(payload_meta),
+                    # memory typed
+                    normalized_typed.get("topic") if item_type == "memory" else None,
+                    normalized_typed.get("decision") if item_type == "memory" else None,
+                    normalized_typed.get("context") if item_type == "memory" else None,
+                    normalized_typed.get("rationale") if item_type == "memory" else None,
+                    json.dumps(normalized_typed.get("related_links", [])) if item_type == "memory" else None,
+                    # doc typed
+                    json.dumps(normalized_typed.get("authors", [])) if item_type == "doc" else None,
+                    json.dumps(normalized_typed.get("related_docs", [])) if item_type == "doc" else None,
+                    # bug typed
+                    normalized_typed.get("severity") if item_type == "bug" else None,
+                    normalized_typed.get("reproduction") if item_type == "bug" else None,
+                    normalized_typed.get("expected") if item_type == "bug" else None,
+                    normalized_typed.get("root_cause") if item_type == "bug" else None,
+                    # todo typed
+                    normalized_typed.get("kind") if item_type == "todo" else None,
+                    json.dumps(normalized_typed.get("acceptance_criteria", [])) if item_type == "todo" else None,
+                    normalized_typed.get("priority") if item_type == "todo" else None,
                 ],
             )
         return self.get_item(project=project_slug, project_id=project_db_id, item_id=item_id)
@@ -378,6 +478,20 @@ class ItemService:
                     i.tags,
                     i.status,
                     i.meta,
+                    i.memory_topic,
+                    i.memory_decision,
+                    i.memory_context,
+                    i.memory_rationale,
+                    i.memory_related_links,
+                    i.doc_authors,
+                    i.doc_related_docs,
+                    i.bug_severity,
+                    i.bug_reproduction,
+                    i.bug_expected,
+                    i.bug_root_cause,
+                    i.todo_kind,
+                    i.todo_acceptance_criteria,
+                    i.todo_priority,
                     i.version,
                     i.created_at,
                     i.updated_at
@@ -408,6 +522,34 @@ class ItemService:
         if "body_md" in fields:
             raise ValueError("To update the body use 'patch_doc' or the '/body' endpoint.")
         project_db_id, project_slug, project_name = self._ensure_project(project, project_id)
+        # Fetch current item to evaluate conditional constraints
+        current_item = self.get_item(project=project, project_id=project_id, item_id=item_id)
+        # Determine final status (after update) to enforce resolution requirements
+        requested_status = fields.get("status") if isinstance(fields, dict) else None
+        final_status = _validate_status(requested_status) if requested_status is not None else current_item.status
+
+        # Determine candidate meta (merge strategy: if provided, use it; else current)
+        candidate_meta_raw = fields.get("meta") if isinstance(fields, dict) else None
+        candidate_meta = candidate_meta_raw if candidate_meta_raw is not None else (current_item.meta or {})
+        # Normalize candidate meta shape according to item type for validations below
+        try:
+            normalized_candidate_meta = validate_meta(item_type=current_item.type, meta=candidate_meta or {})
+        except Exception:
+            # Let the usual field-level validation below surface a better error if 'meta' was provided
+            normalized_candidate_meta = candidate_meta or {}
+
+        # Enforce meta requirements when resolving bug/todo items
+        if final_status == "resolved" and current_item.type in {"bug", "todo"}:
+            done_summary = (normalized_candidate_meta.get("done_summary") or "").strip()
+            related_files = normalized_candidate_meta.get("related_files") or []
+            # related_files must be a non-empty list of non-empty strings
+            related_files_ok = isinstance(related_files, list) and any(
+                (str(x).strip() for x in related_files if x is not None)
+            )
+            if len(done_summary) < 120 or not related_files_ok:
+                raise ValueError(
+                    "When resolving a bug/todo you must provide meta.done_summary (>= 120 chars) and meta.related_files (at least one)."
+                )
         updates: list[str] = []
         params: list[Any] = []
         if "title" in fields:
@@ -423,9 +565,47 @@ class ItemService:
             updates.append("status = ?")
             params.append(_validate_status(fields.get("status")))
         if "meta" in fields:
-            normalized_meta = validate_meta(item_type=self.get_item(project=project, project_id=project_id, item_id=item_id).type, meta=fields.get("meta") or {})
+            normalized_meta = validate_meta(item_type=current_item.type, meta=fields.get("meta") or {})
             updates.append("meta = ?")
             params.append(json.dumps(normalized_meta))
+        # typed updates (optional and partial)
+        typed_fields = fields.get("typed") if isinstance(fields, dict) else None
+        if isinstance(typed_fields, dict) and typed_fields:
+            # Merge with current to validate required for types that have them
+            merged = {**(current_item.typed or {}), **typed_fields}
+            normalized_typed = validate_typed_required(current_item.type, merged) if current_item.type in {"memory", "bug", "todo"} else merged
+            if current_item.type == "memory":
+                if "topic" in typed_fields:
+                    updates.append("memory_topic = ?"); params.append(normalized_typed.get("topic"))
+                if "decision" in typed_fields:
+                    updates.append("memory_decision = ?"); params.append(normalized_typed.get("decision"))
+                if "context" in typed_fields:
+                    updates.append("memory_context = ?"); params.append(normalized_typed.get("context"))
+                if "rationale" in typed_fields:
+                    updates.append("memory_rationale = ?"); params.append(normalized_typed.get("rationale"))
+                if "related_links" in typed_fields:
+                    updates.append("memory_related_links = ?"); params.append(json.dumps(normalized_typed.get("related_links", [])))
+            elif current_item.type == "doc":
+                if "authors" in typed_fields:
+                    updates.append("doc_authors = ?"); params.append(json.dumps(normalized_typed.get("authors", [])))
+                if "related_docs" in typed_fields:
+                    updates.append("doc_related_docs = ?"); params.append(json.dumps(normalized_typed.get("related_docs", [])))
+            elif current_item.type == "bug":
+                if "severity" in typed_fields:
+                    updates.append("bug_severity = ?"); params.append(normalized_typed.get("severity"))
+                if "reproduction" in typed_fields:
+                    updates.append("bug_reproduction = ?"); params.append(normalized_typed.get("reproduction"))
+                if "expected" in typed_fields:
+                    updates.append("bug_expected = ?"); params.append(normalized_typed.get("expected"))
+                if "root_cause" in typed_fields:
+                    updates.append("bug_root_cause = ?"); params.append(normalized_typed.get("root_cause"))
+            elif current_item.type == "todo":
+                if "kind" in typed_fields:
+                    updates.append("todo_kind = ?"); params.append(normalized_typed.get("kind"))
+                if "acceptance_criteria" in typed_fields:
+                    updates.append("todo_acceptance_criteria = ?"); params.append(json.dumps(normalized_typed.get("acceptance_criteria", [])))
+                if "priority" in typed_fields:
+                    updates.append("todo_priority = ?"); params.append(normalized_typed.get("priority"))
         if not updates:
             raise ValueError("'fields' contains no updatable properties.")
         updates.append("version = version + 1")
@@ -465,6 +645,20 @@ class ItemService:
                 i.tags,
                 i.status,
                 i.meta,
+                i.memory_topic,
+                i.memory_decision,
+                i.memory_context,
+                i.memory_rationale,
+                i.memory_related_links,
+                i.doc_authors,
+                i.doc_related_docs,
+                i.bug_severity,
+                i.bug_reproduction,
+                i.bug_expected,
+                i.bug_root_cause,
+                i.todo_kind,
+                i.todo_acceptance_criteria,
+                i.todo_priority,
                 i.version,
                 i.created_at,
                 i.updated_at
@@ -518,6 +712,20 @@ class ItemService:
                 i.tags,
                 i.status,
                 i.meta,
+                i.memory_topic,
+                i.memory_decision,
+                i.memory_context,
+                i.memory_rationale,
+                i.memory_related_links,
+                i.doc_authors,
+                i.doc_related_docs,
+                i.bug_severity,
+                i.bug_reproduction,
+                i.bug_expected,
+                i.bug_root_cause,
+                i.todo_kind,
+                i.todo_acceptance_criteria,
+                i.todo_priority,
                 i.version,
                 i.created_at,
                 i.updated_at
@@ -584,7 +792,7 @@ class ItemService:
         """
         item = self.get_item(project=project, project_id=project_id, item_id=item_id)
         if expected_version is not None and item.version != expected_version:
-            raise ValueError("La versión actual no coincide con expected_version.")
+                raise ValueError("Current version does not match expected_version.")
         with self._connect() as conn:
             conn.execute(
                 """
@@ -604,7 +812,7 @@ class ItemService:
                 [item_id, project_db_id],
             )
             if result.rowcount == 0:
-                raise ValueError("Item no encontrado para eliminar.")
+                raise ValueError("Item not found to delete.")
 
     def count_items_by_type(self, project: Optional[str], project_id: Optional[str]) -> dict[str, int]:
         """Return item counts grouped by type for the given project.

@@ -43,7 +43,7 @@ def bootstrap_memory_db(config: MemoryDatabaseConfig) -> None:
             );
             """
         )
-        # items
+        # items (base columns)
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS items (
@@ -62,6 +62,33 @@ def bootstrap_memory_db(config: MemoryDatabaseConfig) -> None:
             );
             """
         )
+        # Ensure typed columns exist (added progressively). We keep TEXT storage (JSON for arrays).
+        cur = conn.execute("PRAGMA table_info(items);")
+        cols = {row[1] for row in cur.fetchall()}
+        def add_col(name: str, decl: str = "TEXT"):
+            if name not in cols:
+                try:
+                    conn.execute(f"ALTER TABLE items ADD COLUMN {name} {decl};")
+                except Exception:
+                    pass
+        # memory typed
+        add_col("memory_topic")
+        add_col("memory_decision")
+        add_col("memory_context")
+        add_col("memory_rationale")
+        add_col("memory_related_links")  # JSON array in TEXT
+        # doc typed (optional fields kept in meta; authors/related_docs exposed as typed)
+        add_col("doc_authors")           # JSON array in TEXT
+        add_col("doc_related_docs")      # JSON array in TEXT
+        # bug typed (required for create)
+        add_col("bug_severity")
+        add_col("bug_reproduction")
+        add_col("bug_expected")
+        add_col("bug_root_cause")
+        # todo typed (required for create)
+        add_col("todo_kind")
+        add_col("todo_acceptance_criteria")  # JSON array in TEXT
+        add_col("todo_priority")
         # metadata (optional small key/value store for UI)
         conn.execute(
             """
@@ -83,4 +110,3 @@ def bootstrap_memory_db(config: MemoryDatabaseConfig) -> None:
 
 
 __all__ = ["bootstrap_memory_db"]
-

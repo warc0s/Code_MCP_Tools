@@ -552,7 +552,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             raise HTTPException(status_code=400, detail="Debes proporcionar una URL de sitemap.")
         async with state.lock:
             if state.rebuild_running:
-                raise HTTPException(status_code=409, detail="Ya hay una reconstrucción en curso.")
+                raise HTTPException(status_code=409, detail="A rebuild is already in progress.")
             state.rebuild_running = True
             try:
                 state.close_connection()
@@ -570,7 +570,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             raise HTTPException(status_code=400, detail="Debes indicar un fichero de URLs.")
         async with state.lock:
             if state.rebuild_running:
-                raise HTTPException(status_code=409, detail="Ya hay una reconstrucción en curso.")
+                raise HTTPException(status_code=409, detail="A rebuild is already in progress.")
             state.rebuild_running = True
             try:
                 state.close_connection()
@@ -706,6 +706,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
                 tags=payload.get("tags"),
                 status=payload.get("status"),
                 meta=payload.get("meta"),
+                typed=payload.get("typed"),
             )
             return {"item": asdict(item)}
         except ValueError as exc:

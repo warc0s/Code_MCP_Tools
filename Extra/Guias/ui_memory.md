@@ -14,7 +14,8 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 
 ## Pestaña Memory
 - Subpestañas: Memory, Docs, Bugs, Todo.
-- El board tipo kanban solo aparece en `Todo`.
+- El board tipo kanban aparece en `Todo` y ahora también en `Bugs`.
+  - En `Bugs` se muestran solo dos columnas: `Pending` y `Resolved`.
 - Para Memory/Docs/Bugs se muestra un listado de tarjetas simple (grid), con:
   - Título, tipo, versión, tags
   - Extracto del body (cuando aplica)
@@ -22,7 +23,13 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 
 ## Edición inline (✎)
 - Al pulsar ✎ en una card se despliega un editor inline con:
-  - Title, Status, Tags, Meta (JSON)
+  - Title, Status, Tags
+  - Typed fields por tipo (obligatorios):
+    - bug: severity, reproduction, expected, root_cause
+    - todo: kind, acceptance_criteria, priority
+    - memory: topic, decision, context, rationale
+    - doc: authors, related_docs (opcionales)
+  - Meta (JSON, opcional; extras como done_summary, related_files, logs...)
   - Body (markdown) para todos los tipos (`memory`, `doc`, `bug`, `todo`)
 - Guardado:
   - Primero actualiza metadatos vía `PATCH /ui/api/items/{id}` con `fields`
@@ -31,7 +38,8 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 
 ## Eliminaciones y estado
 - Delete en cada card elimina el item del proyecto activo.
-- En Todo, el drag-and-drop entre columnas cambia el `status`.
+- En Todo y Bugs, el drag-and-drop entre columnas cambia el `status`.
+  - Al mover a `Resolved`, si faltan `meta.done_summary` (≥120 chars) o `meta.related_files` (al menos uno), la UI solicita esos datos en un modal y los guarda junto al cambio de estado.
 
 ## Qué desaparece
 - Bloque de “Project selection” dentro de Memory (ahora en Settings).
@@ -60,7 +68,7 @@ ui:
 - La edición de metadatos sigue usando `PATCH /ui/api/items/{id}` con `fields`.
 
 ## Plantillas y UX
-- El campo Meta (JSON) en el formulario “Create item” aplica automáticamente la plantilla del subtipo seleccionado al cambiar entre pestañas (Memory/Docs/Bugs/Todo), evitando que se arrastre contenido del subtipo anterior.
+- El formulario “Create item” incluye campos tipados por tipo (obligatorios cuando aplica). El bloque “Meta (JSON)” queda como avanzado/opcional para extras; su plantilla se auto-aplica al cambiar de tipo.
 
 ### Campos sugeridos por tipo (Meta JSON)
 - bug:
@@ -69,8 +77,7 @@ ui:
   - logs_excerpt (opcional)
   - expected (comportamiento esperado)
   - root_cause (causa raíz)
-  - fix_summary (opcional)
-  - fixed_in_commit (opcional)
+  - done_summary (resumen de implementación al resolver, ≥120 chars)
   - resolution_criteria (lista de checks para darlo por resuelto)
   - screenshots (lista de URLs, opcional)
   - related_files (lista de rutas/URLs, opcional)
@@ -81,6 +88,16 @@ ui:
   - dependencies (lista)
   - priority (p0|p1|p2)
   - related_files (lista de rutas/URLs, opcional)
+  - done_summary (resumen de implementación al resolver, ≥120 chars)
+
+## Validación Pydantic y schema MCP
+- El backend valida `meta` con modelos Pydantic específicos por tipo. Si faltan campos obligatorios o hay valores inválidos, devuelve un error detallado (campos faltantes, valores inválidos) para corregir rápidamente.
+- Las tools MCP `store_item` y `update_item` exponen en su JSON Schema un `oneOf` con el esquema de `meta` para cada tipo (memory/doc/bug/todo).
+
+## Screenshots y logs
+- Toma capturas con MCP Chrome DevTools (viewport) y guárdalas en `static/uploads/bugs/<slug>.png`. `.gitignore` excluye los archivos de `static/uploads/*`.
+- En `bug.meta.screenshots` añade la URL servida por la app: `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png`.
+- Si no procede captura, pega al menos `logs_excerpt` y describe los pasos exactos en `reproduction`.
 - doc:
   - authors ([])
   - source_url

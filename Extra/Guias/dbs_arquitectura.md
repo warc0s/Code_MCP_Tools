@@ -24,6 +24,7 @@ memory_database:   # Memoria (SQLite)
 ## Esquemas
 - DuckDB (RAG): `docs`, `chunks`, `metadata` (con VSS/FTS si están disponibles).
 - SQLite (memoria): `projects`, `items`, `metadata`.
+  - `items` incluye las columnas base (`tags`, `status`, `meta`) y columnas tipadas por tipo añadidas idempotentemente (p. ej., `bug_severity`, `todo_kind`, `memory_topic`, etc.). Las listas tipadas se almacenan como JSON en columnas `TEXT`.
 
 ## Ámbito
 - RAG: global para toda la app; un rebuild sustituye el índice completo.
@@ -36,7 +37,7 @@ memory_database:   # Memoria (SQLite)
 
 ## Notas técnicas
 - En SQLite se aplica `PRAGMA foreign_keys=ON` por conexión.
-- Columnas `tags`/`meta` se almacenan como `TEXT` (JSON serializado) y se normalizan via `json.dumps/loads` en `ItemService`.
+- Columnas `tags`/`meta` se almacenan como `TEXT` (JSON serializado) y se normalizan via `json.dumps/loads` en `ItemService`. Los campos tipados se guardan en columnas específicas para queries simples y UX más clara.
 - En búsquedas sobre items, `CAST(... AS VARCHAR)` se sustituyó por `lower(i.meta)` para compatibilidad SQLite.
 - En el rebuild del RAG, DuckDB ya no intenta crear índices sobre `items`.
 

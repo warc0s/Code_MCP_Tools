@@ -7,9 +7,10 @@ def test_update_meta_guidance_overwrites_meta_with_template():
     assert 'metaEl.value = getMetaTemplate(' in js
 
 
-def test_bug_template_includes_expected_field():
+def test_bug_template_includes_done_summary_and_logs_excerpt():
     js = Path('static/js/tabs/memory.js').read_text(encoding='utf-8')
-    assert "expected: 'what should have happened instead'" in js
+    assert 'done_summary' in js
+    assert 'logs_excerpt' in js
 
 
 def test_todo_template_includes_dependencies_field():

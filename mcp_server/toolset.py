@@ -10,7 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from utils.cli_sessions import restart_session, send_input, start_session, stop_session
 from utils.items import ItemService
-from utils.item_meta import meta_json_schema_oneof
+from utils.item_meta import meta_json_schema_oneof, typed_json_schema_oneof
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ ITEM_SCHEMA: Dict[str, Any] = {
         "tags": {"type": "array", "items": {"type": "string"}},
         "status": {"type": "string"},
         "meta": {"type": "object"},
+        "typed": {"type": "object"},
         "version": {"type": "integer"},
         "created_at": {"type": "string"},
         "updated_at": {"type": "string"},
@@ -264,6 +265,7 @@ class RAGToolset:
                         "tags": {"type": "array", "items": {"type": "string"}},
                         "status": {"type": "string"},
                         "meta": meta_json_schema_oneof(),
+                        "typed": typed_json_schema_oneof(required=True),
                     },
                     "required": ["type", "title"],
                 },
@@ -285,6 +287,7 @@ class RAGToolset:
                                 "tags": {"type": "array", "items": {"type": "string"}},
                                 "status": {"type": "string"},
                                 "meta": meta_json_schema_oneof(),
+                                "typed": typed_json_schema_oneof(required=False),
                             },
                         },
                     },
@@ -513,6 +516,7 @@ class RAGToolset:
                     tags=payload.get("tags"),
                     status=payload.get("status"),
                     meta=payload.get("meta"),
+                    typed=payload.get("typed"),
                 )
                 results = {"item": self._item_to_dict(item)}
             elif name == "update_item":

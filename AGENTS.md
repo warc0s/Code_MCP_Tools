@@ -61,3 +61,4 @@
 - Trata que los archivos no superen las dos mil lineas de codigo
 - Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
  - Soluciones robustas, no parches: no aceptes desactivar FKs para operar; si algo requiere limpieza, actualiza el esquema, recrea la BD si es necesario y valida con pruebas.
+ - No ejecutes `python app.py` ni levantes la aplicación tú: asume que el usuario la tiene corriendo. Para validaciones manuales, usa MCP Chrome DevTools apuntando a la URL base sin prefijos adicionales (p. ej., `http://127.0.0.1:8000/`).

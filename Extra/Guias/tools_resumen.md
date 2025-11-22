@@ -36,7 +36,7 @@ flowchart TD
 - `dense_search` / `lexical_search`: están presentes pero deshabilitados en `config.yaml` (actívalos con `mcp.tools` o sets).
 - Ámbito: el índice RAG es global (no por proyecto); las tools de Items operan por proyecto.
 - `cli_start`/`cli_send`/`cli_stop`/`cli_restart`: control de CLIs de texto; soportan `conda_env`, `workdir`, `timeout` y devuelven `status_hint`/`next_step`. Logs en disco controlados por `mcp.cli_logs_enabled`.
-- `store_item`/`update_item`/`get_item`/`list_items`/`search_items`/`patch_doc`/`delete_item`: gestión de items por proyecto (`project` o `project_id`), con `tags`/`meta` en JSON y edición de docs vía diffs unificados.
+- `store_item`/`update_item`/`get_item`/`list_items`/`search_items`/`patch_doc`/`delete_item`: gestión de items por proyecto (`project` o `project_id`). `typed` recoge campos obligatorios por tipo; `meta` es opcional para extras. `patch_doc` edita docs por diff unificado.
 
 ## Novedades UI relacionadas
 - Dashboard → Status: agrupa las tools activas por grupo y muestra contadores de Memory para el proyecto activo.
