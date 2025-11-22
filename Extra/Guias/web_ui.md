@@ -5,7 +5,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 ## Arranque
 - Ejecuta `python app.py`.
 - Variables opcionales:
-  - `APP_HOST` (por defecto `127.0.0.1` en local; en Docker se usa `0.0.0.0` si no se sobreescribe)
+  - `APP_HOST` (por defecto `0.0.0.0`; el log sugiere abrir en `http://localhost:8000`)
   - `APP_PORT` (por defecto `8000`)
   - `MCP_HTTP_PATH` (por defecto `/mcp`)
 - El panel vive en la raíz (`http://HOST:PORT/`) y el endpoint MCP en `http://HOST:PORT<MCP_HTTP_PATH>`.

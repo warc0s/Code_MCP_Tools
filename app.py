@@ -231,6 +231,14 @@ def _is_docker() -> bool:
         return False
 
 
+def _resolve_host_binding() -> Tuple[str, str]:
+    """Return the bind host and the host to display in logs."""
+    host_env = (os.getenv("APP_HOST") or "").strip()
+    host = host_env or "0.0.0.0"
+    display_host = "localhost" if host == "0.0.0.0" else host
+    return host, display_host
+
+
 _RESERVED_PROJECT_SLUGS = {
     "api", "ui", "mcp", "docs", "items", "projects", "status", "settings", "rebuild", "log"
 }
@@ -839,13 +847,16 @@ def main() -> None:
     level = getattr(logging, level_name, logging.INFO)
     logging.basicConfig(level=level, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 
-    host_env = os.getenv("APP_HOST")
-    if host_env:
-        host = host_env
-    else:
-        host = "0.0.0.0" if _is_docker() else "127.0.0.1"
+    host, display_host = _resolve_host_binding()
     port = int(os.getenv("APP_PORT", "8000"))
-    logger.info("Servidor web+MCP en http://%s:%s (MCP en %s)", host, port, http_path)
+    logger.info(
+        "Servidor web+MCP en http://%s:%s (MCP en %s). Abre http://%s:%s en tu navegador.",
+        host,
+        port,
+        http_path,
+        display_host,
+        port,
+    )
     uvicorn.run(app, host=host, port=port, log_level=level_name.lower())
 
 
