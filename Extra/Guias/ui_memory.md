@@ -31,6 +31,7 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
     - doc: authors, related_docs (opcionales)
   - Meta (JSON, opcional; extras como done_summary, related_files, logs...)
   - Body (markdown) para todos los tipos (`memory`, `doc`, `bug`, `todo`)
+  - En `todo` se muestra la ayuda de prioridad: `p0` (máxima/urgente), `p1` (alta), `p2` (normal)
 - Guardado:
   - Primero actualiza metadatos vía `PATCH /ui/api/items/{id}` con `fields`
   - Después, si hay body, lo guarda con `POST /ui/api/items/{id}/body` (aplica a cualquier tipo)
@@ -40,6 +41,7 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 - Delete en cada card elimina el item del proyecto activo.
 - En Todo y Bugs, el drag-and-drop entre columnas cambia el `status`.
   - Al mover a `Resolved`, si faltan `meta.done_summary` (≥120 chars) o `meta.related_files` (al menos uno), la UI solicita esos datos en un modal y los guarda junto al cambio de estado.
+  - También desde el editor inline: si cambias `Status` a `Resolved` y faltan esos campos, se abre el mismo modal antes de guardar.
 
 ## Qué desaparece
 - Bloque de “Project selection” dentro de Memory (ahora en Settings).
@@ -69,6 +71,13 @@ ui:
 
 ## Plantillas y UX
 - El formulario “Create item” incluye campos tipados por tipo (obligatorios cuando aplica). El bloque “Meta (JSON)” queda como avanzado/opcional para extras; su plantilla se auto-aplica al cambiar de tipo.
+
+## Modal “Show”
+- Cada tarjeta incluye un botón `Show` que abre un modal de solo lectura con el detalle completo del item:
+  - Datos básicos (tipo, versión, estado, tags)
+  - Campos `typed` por tipo (p. ej., bug: severity, expected, reproduction, root_cause)
+  - Extras en `meta` cuando existan (done_summary, related_files, logs_excerpt, screenshots, criteria)
+  - Body completo si existe
 
 ### Campos sugeridos por tipo (Meta JSON)
 - bug:
