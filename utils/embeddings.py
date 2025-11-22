@@ -29,6 +29,7 @@ class EmbeddingProvider:
         self._model = None
         self._client = None
         self._embedding_dim: Optional[int] = config.embedding_dim
+        self._device: Optional[str] = None  # 'cuda' si disponible; 'cpu' en otro caso
 
     def _load_sentence_transformer(self):
         from sentence_transformers import SentenceTransformer
@@ -72,7 +73,22 @@ class EmbeddingProvider:
             if "no module named 'torch'" in joined or "requires the following packages" in joined:
                 hint = (
                     "sentence-transformers requiere torch para funcionar. "
-                    "Instala una build compatible de torch (por ejemplo, `pip install torch`)."
+                    "Instala una build CPU de torch (por ejemplo, `pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`)."
+                )
+            elif "libnccl.so" in joined or "nccl" in joined:
+                hint = (
+                    "La build de torch detectada intenta usar NCCL/CUDA y falla. "
+                    "Instala la versión CPU: `pip install --upgrade --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`."
+                )
+            elif "torchvision::nms" in joined or "torchvision" in joined:
+                hint = (
+                    "Conflicto con torchvision detectado (mismatch con torch). "
+                    "Instala torchvision CPU a juego con tu torch: `pip install --extra-index-url https://download.pytorch.org/whl/cpu torchvision==0.19.1+cpu`."
+                )
+            elif "could not import module 'pretrainedmodel'" in joined:
+                hint = (
+                    "Transformers parece roto o desalineado. Reinstala `transformers` y `sentence-transformers`: "
+                    "`pip install -U transformers sentence-transformers` y asegúrate de usar Torch/torchvision CPU compatibles."
                 )
             elif "no module named 'six'" in joined:
                 hint = (
@@ -86,14 +102,33 @@ class EmbeddingProvider:
 
             raise RuntimeError(f"{hint} Detalle: {message_chain[0]}") from exc
 
+        # Selección de dispositivo: usa CUDA si está disponible, si no CPU.
+        device = "cpu"
         try:
-            self._model = SentenceTransformer(self.model_name)
+            # Preferir un stub inyectado en tests si existe
+            import sys as _sys  # type: ignore
+            torch_mod = getattr(_sys.modules.get(__name__), "torch", None)
+            if torch_mod is None:
+                import torch as torch_mod  # type: ignore
+            if getattr(torch_mod, "cuda", None) and torch_mod.cuda.is_available():
+                device = "cuda"
+        except Exception:
+            device = "cpu"
+        self._device = device
+
+        try:
+            self._model = SentenceTransformer(self.model_name, device=self._device)
         except Exception as exc:
             raise RuntimeError(
                 f"No se pudo cargar el modelo de embeddings '{self.model_name}': {exc}"
             ) from exc
 
         self._embedding_dim = int(self._model.get_sentence_embedding_dimension())
+
+    @property
+    def device(self) -> Optional[str]:
+        """Devuelve el dispositivo elegido ('cuda' o 'cpu') tras cargar el modelo."""
+        return self._device
 
     def _ensure_cloud_client(self):
         if self._client is not None:

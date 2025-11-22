@@ -4,8 +4,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DEFAULT_TIMEOUT=3600 \
-    DEBIAN_FRONTEND=noninteractive \
-    PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
+    DEBIAN_FRONTEND=noninteractive
 
 WORKDIR /app
 

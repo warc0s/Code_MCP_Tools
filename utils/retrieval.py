@@ -119,9 +119,63 @@ class Retriever:
                 """,
                 [vector, vector, top],
             ).fetchall()
-        except Exception:
-            logger.exception("Error ejecutando la búsqueda densa en DuckDB.")
-            raise
+        except Exception as exc:
+            # Fallback robusto: si el operador vectorial no está disponible (p. ej., VSS no cargado),
+            # calculamos similitud coseno en Python sobre una muestra acotada.
+            logger.warning(
+                "Fallo búsqueda densa con VSS; usando fallback en memoria (parcial): %s",
+                exc,
+            )
+            sample_size = max(200, min(top * 50, 1000))
+            try:
+                sample_rows = self.connection.execute(
+                    """
+                    SELECT
+                        c.chunk_id,
+                        c.doc_id,
+                        d.url,
+                        d.title,
+                        c.section_path,
+                        c.position,
+                        c.text,
+                        c.embedding
+                    FROM chunks AS c
+                    JOIN docs AS d ON d.doc_id = c.doc_id
+                    LIMIT ?
+                    """,
+                    [sample_size],
+                ).fetchall()
+            except Exception:
+                logger.exception("Error ejecutando el fallback de búsqueda densa.")
+                raise
+            rows = []
+            for row in sample_rows:
+                (
+                    chunk_id,
+                    doc_id,
+                    url,
+                    title,
+                    section_path,
+                    position,
+                    text,
+                    embedding,
+                ) = row
+                score = _cosine_similarity(vector, list(embedding))
+                rows.append(
+                    (
+                        chunk_id,
+                        doc_id,
+                        url,
+                        title,
+                        section_path,
+                        position,
+                        text,
+                        score,
+                        list(embedding),
+                    )
+                )
+            # Ordenar por score y truncar al top
+            rows = sorted(rows, key=lambda r: float(r[7]), reverse=True)[:top]
         candidates = []
         for row in rows:
             (

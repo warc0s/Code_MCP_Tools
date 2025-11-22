@@ -16,7 +16,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 
 ## Modos de ejecución
 - `config.yaml` expone `main.mode` con valores `local` o `cloud`.
-- `local` usa los modelos HuggingFace configurados (`Qwen/Qwen3-Embedding-0.6B` y `Qwen/Qwen3-Reranker-0.6B`) descargándolos a `.cache/models/`.
+- `local` usa los modelos HuggingFace configurados (`Qwen/Qwen3-Embedding-0.6B` y `Qwen/Qwen3-Reranker-0.6B`) descargándolos a `.cache/models/`. Si hay GPU CUDA disponible en el entorno y Torch la detecta, se usará automáticamente; si no, caerá a CPU.
 - `cloud` usa el embedding OpenAI `text-embedding-3-small` vía API oficial (requiere `.env` con `openai_api_key=...`) y mantiene el reranker Qwen `8B` servido por DeepInfra (`DEEPINFRA_API_KEY=...` si activas reranking).
 - La CLI muestra el modo y los modelos activos en cada iteración. Al iniciar el servidor se imprime un aviso si la BD DuckDB fue creada en otro modo, indicando los modelos almacenados vs. configurados y la dimensión registrada; puedes abortar o continuar bajo tu responsabilidad.
 - Durante la ingesta se guardan en la tabla `metadata` los campos `runtime_mode`, `embedding_model_name`, `embedding_dim` y `reranker_model_name` para futuras verificaciones.
@@ -122,9 +122,11 @@ Consulta también Dashboard → Integrations para snippets con tu MCP URL actual
 - Si faltan extensiones, DuckDB pedirá descargar una vez con red.
 - Reranker activado por defecto (`enable_rerank: true`) usando Qwen `0.6B` en local o `8B` vía DeepInfra en cloud; desactívalo con `retrieval.enable_rerank`.
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
-- El stack está fijado a CPU: no se usan `device_map`, flash attention ni aceleradores. Torch debe estar disponible en CPU (`pip install torch`).
+- GPU si está disponible: el proveedor de embeddings detecta CUDA y usa GPU de forma automática; si no, CPU. Asegúrate de instalar versiones emparejadas de Torch/TorchVision (por ejemplo, `torch==2.4.1` y `torchvision==0.19.1`).
+- Si aparece `ImportError: libnccl.so.*`, tu instalación de Torch requiere NCCL/CUDA. Opciones: instalar dependencias CUDA/NCCL del sistema, instalar la variante CPU de Torch o usar modo cloud para embedding.
+- Si aparece `operator torchvision::nms does not exist`, instala/ajusta una versión de `torchvision` que empareje con tu `torch` (p. ej., `pip install torchvision==0.19.1`).
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
-- `requirements.txt` incluye CPU libs, `fastapi`, `uvicorn`, `pexpect` y los clientes remotos (`torch`, `sentence-transformers`, `openai`, `requests`, etc.).
+- `requirements.txt` incluye CPU libs, `fastapi`, `uvicorn`, `pexpect` y los clientes remotos (`torch` CPU, `sentence-transformers`, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
 
 ## Logging y depuración

@@ -6,12 +6,15 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+import logging
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 import duckdb
 
 from utils.config import DatabaseConfig
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -76,22 +79,25 @@ class DuckDBManager:
                     conn.execute(f"INSTALL {extension};")
                     conn.execute(f"LOAD {extension};")
                 except Exception as exc:
-                    raise RuntimeError(
-                        f"No fue posible instalar la extensión '{extension}'. "
-                        "Asegúrate de tener conectividad para descargarla al menos una vez."
-                    ) from exc
+                    # Robustez: sin red o repos bloqueados, continuar sin la extensión
+                    logger.warning(
+                        "DuckDB: no fue posible INSTALL/LOAD de '%s'. Continuando sin la extensión: %s",
+                        extension,
+                        exc,
+                    )
 
-        # Habilita la persistencia experimental de índices HNSW en DuckDB (requerido para almacenar en disco)
+        # Habilita la persistencia experimental de índices HNSW cuando sea posible
         try:
             conn.execute("SET hnsw_enable_experimental_persistence = true;")
         except Exception:
             try:
                 conn.execute("PRAGMA hnsw_enable_experimental_persistence=true;")
             except Exception as exc:
-                raise RuntimeError(
-                    "No se pudo habilitar la persistencia experimental de HNSW. "
-                    "Actualiza DuckDB o desactiva la creación de índice HNSW."
-                ) from exc
+                # No bloquear el rebuild si la PRAGMA no existe
+                logger.info(
+                    "DuckDB: no se pudo habilitar hnsw_enable_experimental_persistence; los índices HNSW no serán persistentes: %s",
+                    exc,
+                )
 
     def reset(self) -> None:
         if self._connection:

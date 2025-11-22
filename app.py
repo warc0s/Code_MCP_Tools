@@ -69,8 +69,16 @@ def _install_extensions(db_path: Path) -> None:
             try:
                 install_connection.execute(f"LOAD {extension};")
             except Exception:
-                install_connection.execute(f"INSTALL {extension};")
-                install_connection.execute(f"LOAD {extension};")
+                try:
+                    install_connection.execute(f"INSTALL {extension};")
+                    install_connection.execute(f"LOAD {extension};")
+                except Exception as exc:
+                    # Robustez: sin red/no instaladas, continuar sin romper el arranque
+                    logger.warning(
+                        "DuckDB: no fue posible INSTALL/LOAD de '%s'. Continuando sin la extensión: %s",
+                        extension,
+                        exc,
+                    )
     finally:
         install_connection.close()
 
@@ -79,7 +87,14 @@ def _open_ro_connection(db_path: Path):
     # Use read_write everywhere to avoid DuckDB config mismatch across connections
     connection = duckdb.connect(db_path.as_posix(), read_only=False)
     for extension in ("vss", "fts"):
-        connection.execute(f"LOAD {extension};")
+        try:
+            connection.execute(f"LOAD {extension};")
+        except Exception as exc:
+            logger.warning(
+                "DuckDB: no se pudo LOAD '%s' en la conexión principal; búsquedas pueden degradarse: %s",
+                extension,
+                exc,
+            )
     return connection
 
 

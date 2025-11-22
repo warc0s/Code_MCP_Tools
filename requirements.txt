@@ -5,8 +5,9 @@ PyYAML
 sentence-transformers
 fastapi
 uvicorn
-fastmcp
 pexpect
 torch==2.4.1
 openai
 requests
+jinja2
+transformers

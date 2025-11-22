@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pexpect
+import re as _re
 
 LOG_DIR = Path("data/cli_sessions")
 DEPENDENCY_MARKERS = (
@@ -64,6 +65,29 @@ def _merge_env(custom_env: Optional[Dict[str, str]]) -> Dict[str, str]:
     if custom_env:
         merged.update({k: str(v) for k, v in custom_env.items()})
     return merged
+
+
+_CONDA_ENV_PATTERN = _re.compile(r"^[A-Za-z0-9_-]{1,64}$")
+
+
+def _validate_conda_env(name: Optional[str]) -> Optional[str]:
+    """Validate a conda environment name defensively.
+
+    Accepts only letters, digits, underscores and hyphens (1..64 chars). Returns
+    the original name if valid, or None if empty. Raises ValueError with user-
+    friendly guidance when invalid (to avoid shell injection or misfires).
+    """
+    if name is None:
+        return None
+    trimmed = str(name).strip()
+    if not trimmed:
+        return None
+    if not _CONDA_ENV_PATTERN.fullmatch(trimmed):
+        raise ValueError(
+            "Invalid conda_env. Use only letters, digits, '_' or '-' (1..64 chars). "
+            "No spaces or shell symbols. For example: 'mcp', 'code_tools', 'env-01'."
+        )
+    return trimmed
 
 
 def _detect_prompt(text: str, prompt_pattern: Optional[str] = None) -> bool:
@@ -241,6 +265,7 @@ def _prepare_command(command: str, conda_env: Optional[str], workdir: Optional[s
     tokens = _resolve_script_path(tokens, workdir)
     base_cmd = shlex.join(tokens) if tokens else command
     if conda_env:
+        # conda_env ya fue validado previamente
         base_cmd = f"conda run -n {conda_env} {base_cmd}"
 
     if batch_queries:
@@ -323,7 +348,18 @@ def start_session(
             raise ValueError("batch_queries debe ser una lista de cadenas.")
     if prompt_pattern is not None and not isinstance(prompt_pattern, str):
         raise ValueError("prompt_pattern debe ser una cadena con una expresión regular.")
-    exec_cmd, cmd_args = _prepare_command(cleaned, conda_env=conda_env, workdir=workdir, batch_queries=batch_queries)
+    # Validate conda env defensively (prevents shell injection and common mistakes)
+    try:
+        conda_env = _validate_conda_env(conda_env)
+    except ValueError as exc:
+        # Provide actionable advice consistent with other hints
+        raise ValueError(
+            f"{exc} If you do not need a conda env, omit the field. If you do, create it first and try again."
+        ) from exc
+
+    exec_cmd, cmd_args = _prepare_command(
+        cleaned, conda_env=conda_env, workdir=workdir, batch_queries=batch_queries
+    )
 
     session_id = str(uuid.uuid4())
     log_path = Path("")
@@ -343,7 +379,8 @@ def start_session(
         )
     except (pexpect.exceptions.ExceptionPexpect, OSError) as exc:
         error_hint = (
-            "No se pudo lanzar el comando. Verifica el comando, comprueba el entorno conda indicado o instala dependencias antes de reintentar."
+            "No se pudo lanzar el comando. Verifica el comando, revisa el entorno conda (usa solo letras/dígitos/_/-) "
+            "o instala dependencias antes de reintentar."
         )
         raise RuntimeError(error_hint) from exc
     session = CLISession(

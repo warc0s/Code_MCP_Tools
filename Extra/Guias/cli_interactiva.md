@@ -25,6 +25,10 @@ mcp:
 ```
 Si omites las claves `cli_*` quedarán deshabilitadas (cuando se usa `mcp.tools`).
 
+### Validación de `conda_env`
+- Por seguridad, el nombre del entorno se valida con un patrón estricto: solo letras, dígitos, `_` o `-` y longitud 1..64. Ejemplos válidos: `mcp`, `code_tools`, `env-01`.
+- Valores con espacios o símbolos del shell (por ejemplo `;`, `|`, `$`, `(`, `)`) serán rechazados con un error claro indicando cómo corregirlo. Si no necesitas entorno, deja `conda_env` vacío o no lo envíes.
+
 ## Cómo usar desde el agente
 1. `cli_start` con el comando deseado (ejemplo: `python app.py`). Opcional: `conda_env: "mcp"` para lanzar con `conda run -n mcp ...`; usa `workdir` para que resuelva rutas relativas del script. Revisa `awaiting_input`; si es `False` y `alive=True`, quizá necesites enviar un salto de línea.
 2. Usa `cli_send` para seleccionar opciones (ej. `"1"` o `"1.2"`). Siempre lee `awaiting_input` y `alive` antes de enviar más texto.

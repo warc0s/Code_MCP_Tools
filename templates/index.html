@@ -2254,6 +2254,15 @@ async function refreshStatus() {
       restartFlag.classList.remove('pulse');
     }
   }
+
+  // Stop auto-refresh when rebuild finishes
+  if (window.__statusAuto && window.__statusAuto.active && !data.rebuild_running) {
+    setStatusAutoRefresh(false);
+    if (!window.__statusAuto.notifiedDone) {
+      try { showToast('Index finished', 'success'); } catch (_) {}
+      window.__statusAuto.notifiedDone = true;
+    }
+  }
 }
 
 function renderToolsGrouped() {
@@ -2389,12 +2398,17 @@ async function rebuildSitemap() {
   log('Rebuilding from sitemap...');
   const btn = event.target;
   setButtonLoading(btn, true);
+  showToast('Indexing started. Status will update every 2s…', 'success');
+  setStatusAutoRefresh(true);
   try {
     const res = await fetch('/ui/api/rebuild/sitemap', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({url})});
     if(res.ok) {
       const data = await res.json();
       log('Rebuilt: docs='+data.documents+' chunks='+data.chunks);
       showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
+      // Stop status auto-refresh and show summary modal
+      try { setStatusAutoRefresh(false); if (window.__statusAuto) window.__statusAuto.notifiedDone = true; } catch(_) {}
+      try { showIngestSummaryModal(data.documents, data.chunks); } catch (_) {}
       refreshStatus();
       refreshDocs();
     } else {
@@ -2416,12 +2430,17 @@ async function rebuildFile() {
   log('Rebuilding from file...');
   const btn = event.target;
   setButtonLoading(btn, true);
+  showToast('Indexing started. Status will update every 2s…', 'success');
+  setStatusAutoRefresh(true);
   try {
     const res = await fetch('/ui/api/rebuild/url-file', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({filename: file})});
     if(res.ok) {
       const data = await res.json();
       log('Rebuilt: docs='+data.documents+' chunks='+data.chunks);
       showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
+      // Stop status auto-refresh and show summary modal
+      try { setStatusAutoRefresh(false); if (window.__statusAuto) window.__statusAuto.notifiedDone = true; } catch(_) {}
+      try { showIngestSummaryModal(data.documents, data.chunks); } catch (_) {}
       refreshStatus();
       refreshDocs();
     } else {
@@ -2754,7 +2773,79 @@ function copyCopilotJson() {
   }).catch(() => showToast('Failed to copy JSON', 'error'));
 }
 
+// Global status auto-refresh controller (active only during rebuild)
+window.__statusAuto = { id: null, active: false, notifiedDone: false };
+
+function setStatusAutoRefresh(enable) {
+  const st = window.__statusAuto;
+  if (enable) {
+    if (st.active && st.id) return;
+    st.active = true; st.notifiedDone = false;
+    try { st.id = setInterval(() => { try { refreshStatus(); } catch (_) {} }, 2000); } catch (_) { st.id = null; st.active = false; }
+  } else {
+    if (st.id) { try { clearInterval(st.id); } catch (_) {} st.id = null; }
+    st.active = false;
+  }
+}
+
 refreshStatus(); refreshTools(); refreshFiles(); refreshDocs(); refreshSettings(); refreshProjects(); updateMetaGuidance(); loadGuidelines(); refreshDashboardStatus();
+</script>
+
+<!-- Ingestion Summary Modal -->
+<div id="ingest-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px);">
+  <div onclick="event.stopPropagation()" style="width: min(520px, 92%); background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); position: relative; z-index: 1;">
+    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+      <svg style="width: 18px; height: 18px; color: #10b981;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      Index completed
+    </div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+      Your RAG index has been rebuilt successfully. Here is a quick summary:
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+      <div style="padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; text-align: center; transition: all 0.2s ease;">
+        <div style="font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Documents</div>
+        <div id="ingest-documents-count" style="font-size: 24px; font-weight: 700; color: var(--text-primary);">0</div>
+      </div>
+      <div style="padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; text-align: center; transition: all 0.2s ease;">
+        <div style="font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Chunks</div>
+        <div id="ingest-chunks-count" style="font-size: 24px; font-weight: 700; color: var(--text-primary);">0</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="ghost-btn" onclick="hideIngestSummaryModal()">Close</button>
+      <button class="primary-btn" onclick="gotoRagDocs(); hideIngestSummaryModal();">View documents</button>
+    </div>
+  </div>
+  <div tabindex="0" onclick="hideIngestSummaryModal()" style="position: absolute; inset: 0; z-index: 0; cursor: pointer;"></div>
+
+</div>
+
+<script>
+function showIngestSummaryModal(documents, chunks) {
+  try {
+    const m = document.getElementById('ingest-modal');
+    if (!m) return;
+    const d = document.getElementById('ingest-documents-count');
+    const c = document.getElementById('ingest-chunks-count');
+    if (d) d.innerText = String(documents ?? 0);
+    if (c) c.innerText = String(chunks ?? 0);
+    m.classList.remove('hidden');
+  } catch (_) {}
+}
+function hideIngestSummaryModal() {
+  try { const m = document.getElementById('ingest-modal'); if (m) m.classList.add('hidden'); } catch (_) {}
+}
+function gotoRagDocs() {
+  try {
+    const ragTab = document.querySelector('.tab-btn[data-tab="rag"]');
+    if (ragTab) ragTab.click();
+    const docsBtn = document.querySelector('#tab-rag .tab-btn[data-subtab="rag-docs"]');
+    if (docsBtn) docsBtn.click();
+    setTimeout(() => { try { refreshDocs(); } catch(_) {} }, 50);
+  } catch (_) {}
+}
 </script>
 
 <footer style="margin-top: 80px; padding-bottom: 40px; text-align: center;">

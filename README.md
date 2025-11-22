@@ -17,7 +17,7 @@ Servidor MCP + panel web orientado a **coding**: expone tools declarativas para 
 - Projects: creación idempotente desde Settings; botón Delete con doble confirmación; no se permite borrar el proyecto activo. Las tools ya no crean proyectos automáticamente (devuelven “Project not found”).
 - CLI: tools `cli_start`/`cli_send`/`cli_stop`/`cli_restart` para orquestar sesiones.
 - Robustez BD: borrado de proyectos en dos fases (items → proyecto) con FKs activas; sin parches de desactivar FKs.
-- Docker CPU‑friendly: `torch==2.4.1` vía índice CPU (`PIP_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu`).
+- Docker: instala PyTorch estándar; si hay GPU disponible, se usará, si no, CPU.
 
 ## Requisitos
 
