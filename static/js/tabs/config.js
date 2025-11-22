@@ -63,7 +63,7 @@ export async function refreshProjects(event) {
       li.innerHTML = `<div><div style="font-weight:600; color: var(--text-primary);">${p.slug} ${isActive ? '<span style="margin-left:6px; font-size:11px; color:#22c55e;">(active)</span>' : ''}</div><div style="font-size:12px; color: var(--text-tertiary);">${p.name} · ${p.items_count || 0} items</div></div>
       <div style="display:flex; gap:6px;">
         <button class="ghost-btn" style="padding:4px 8px;" onclick="selectProject('${p.slug}')">Use</button>
-        <button class="ghost-btn" title="${isActive ? 'You cannot delete the active project' : 'Delete this project (removes all associated items)'}" style="padding:4px 8px;" ${isActive ? 'disabled' : ''} onclick="deleteProject('${p.slug}')">Delete</button>
+        <button class="ghost-btn" title="${isActive ? 'You cannot delete the active project' : 'Delete this project (removes all associated items)'}" style="padding:4px 8px;" onclick="deleteProject('${p.slug}')">Delete</button>
       </div>`;
       list.appendChild(li);
     });
