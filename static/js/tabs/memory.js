@@ -11,6 +11,7 @@ function getMetaTemplate(type) {
         severity: 'high|medium|low',
         reproduction: 'steps to reproduce... (#1, #2, #3)',
         logs_excerpt: 'copy here the most relevant log lines',
+        expected: 'what should have happened instead',
         root_cause: 'short summary of the root cause',
         fix_summary: 'what should we change and why',
         fixed_in_commit: '',
@@ -23,6 +24,7 @@ function getMetaTemplate(type) {
           'criterion 1',
           'criterion 2',
         ],
+        dependencies: [],
         priority: 'p0|p1|p2',
       }, null, 2);
     case 'doc':
@@ -47,9 +49,9 @@ function getMetaTemplate(type) {
 function getMetaHelp(type) {
   switch ((type || '').toLowerCase()) {
     case 'bug':
-      return 'Suggested fields: severity (high|medium|low), reproduction (steps), logs_excerpt, root_cause, fix_summary, fixed_in_commit. You can add or remove fields freely.';
+      return 'Suggested fields: severity (high|medium|low), reproduction (steps), logs_excerpt, expected, root_cause, fix_summary, fixed_in_commit. You can add or remove fields freely.';
     case 'todo':
-      return 'Suggested fields: kind (bug_fix|refactor|feature|chore), reproduction (optional), acceptance_criteria (list), priority (p0|p1|p2). You can add or remove fields freely.';
+      return 'Suggested fields: kind (bug_fix|refactor|feature|chore), reproduction (optional), acceptance_criteria (list), dependencies (list), priority (p0|p1|p2). You can add or remove fields freely.';
     case 'doc':
       return 'Suggested fields: authors, source_url, related_docs, version_notes. You can add or remove fields freely.';
     case 'memory':
@@ -62,7 +64,8 @@ function updateMetaGuidance() {
   const help = document.getElementById('meta-help-text');
   if (help) help.innerText = getMetaHelp(getCurrentItemType());
   const metaEl = document.getElementById('item-meta');
-  if (metaEl && !metaEl.value.trim()) {
+  if (metaEl) {
+    // Auto-apply template on type change, to avoid stale meta from previous type
     metaEl.value = getMetaTemplate(getCurrentItemType());
   }
 }
@@ -226,11 +229,10 @@ function toggleInlineEdit(card, item) {
         <textarea class="input ie-meta" style="height:100px;">${escapeHtml(JSON.stringify(item.meta || {}, null, 2))}</textarea>
         <div class="ie-meta-help" style="font-size: 12px; color: var(--text-tertiary);">${escapeHtml(getMetaHelp ? getMetaHelp(item.type) : '')}</div>
       </div>
-      ${ (item.type === 'doc' || item.type === 'memory') ? `
       <div style="margin-top:8px;">
         <label class="label">Body (markdown)</label>
         <textarea class="input ie-body" style="height:140px;">${escapeHtml(item.body_md || '')}</textarea>
-      </div>` : ''}
+      </div>
       <div style="display:flex; gap:8px; margin-top:8px;">
         <button class="primary-btn ie-save" style="flex:1;">Save</button>
         <button class="ghost-btn ie-cancel">Cancel</button>
@@ -276,7 +278,7 @@ async function saveInlineEdit(editorEl, item) {
       const res = await updateItem(project, item.id, fields);
       item = res.item || item;
     }
-    if (typeof newBody === 'string' && (item.type === 'doc' || item.type === 'memory')) {
+    if (typeof newBody === 'string') {
       await replaceItemBody(project, item.id, newBody, item.version);
     }
     showToast('Item saved', 'success');

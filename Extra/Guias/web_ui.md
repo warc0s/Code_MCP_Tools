@@ -16,6 +16,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
     - Nota de ámbito: `docs_count` es global (RAG global). Los contadores de Memory dependen del proyecto activo.
   - Integrations: instrucciones concisas para Codex CLI, Claude Code y GitHub Copilot (VS Code) con botones de copiar y URL actual.
   - AGENTS.md: renderiza las guidelines del backend (`/ui/api/guidelines`).
+    - Tarjetas informativas: recordatorios para Context7 MCP, Chrome DevTools (MCP) y nombre de proyecto. Elimina en tu copia de AGENTS.md las secciones que no apliquen.
 - **RAG**: subpestañas **Status**, **Ingest** y **Settings**.
   - Settings: configurar modo (`local`/`cloud`), embeddings y reranker. Se guarda en `config.yaml`, marca `needs_restart` + `needs_rebuild`; requiere reinicio y reconstrucción del índice para aplicar.
   - Nota de ámbito: el índice RAG es global (no por proyecto). Un rebuild sustituye el índice global.

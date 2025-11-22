@@ -13,6 +13,12 @@
  - **Desarrollo sin apego a datos.** En esta fase no mantenemos compatibilidad con BDs antiguas. Si un cambio de esquema lo requiere, recrea la BD y el índice (se asume que no hay datos relevantes que conservar).
  - **Migraciones claras.** Cuando sea oportuno, añade migraciones idempotentes; mientras estemos en desarrollo, prioriza la simplicidad: recrear artefactos antes que introducir toggles o soluciones frágiles.
 
+## Validación y pruebas
+- Por cada funcionalidad nueva añade un test en `test/` que la cubra y ejecútalo con `pytest`.
+- Validación dual obligatoria: además de `pytest`, lanza un navegador real vía MCP Chrome DevTools y recorre los flujos tocados (UI). No des por concluido el trabajo hasta tener verde en pruebas y verificación manual en Chrome.
+- Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest → UI con DevTools) hasta conseguir estabilidad.
+- Cobertura mínima esperada: incluir al menos un test que cubra el happy path y un edge case relevante; documenta en `memory` o `doc` los pasos de verificación manual si son no triviales.
+
 ## Coding Style & Naming Conventions
 - Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
 - Añade typing y docstrings orientados; extrae helpers antes de anidar lógica.

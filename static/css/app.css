@@ -258,6 +258,15 @@
       height: 6px;
     }
 
+    /* Hide dropdown arrow for the read-only type selector in Memory create form */
+    #item-type.input {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-image: none !important;
+      pointer-events: none; /* prevent hover cursor changes */
+    }
+
     ::-webkit-scrollbar-track {
       background: transparent;
     }

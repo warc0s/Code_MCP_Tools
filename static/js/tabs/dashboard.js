@@ -2,6 +2,8 @@ import { getStatus, getGuidelines } from '../core/api.js';
 import { log } from '../core/logger.js';
 import { showToast } from '../core/toast.js';
 
+let baseGuidelines = '';
+
 function buildCodexSnippet(url) {
   const safeUrl = url || 'http://127.0.0.1:8000/mcp';
   return [
@@ -134,8 +136,12 @@ export async function refreshDashboardStatus() {
 export async function loadGuidelines() {
   try {
     const content = await getGuidelines();
+    baseGuidelines = content || '';
     const textarea = document.getElementById('guidelines-content');
-    if (textarea) textarea.value = content;
+    if (textarea) {
+      textarea.value = baseGuidelines;
+      textarea.scrollTop = 0;
+    }
   } catch (e) {
     log('Error loading guidelines: ' + e.message);
     const textarea = document.getElementById('guidelines-content');

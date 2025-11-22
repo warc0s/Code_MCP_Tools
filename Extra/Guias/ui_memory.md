@@ -23,10 +23,10 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 ## Edición inline (✎)
 - Al pulsar ✎ en una card se despliega un editor inline con:
   - Title, Status, Tags, Meta (JSON)
-  - Body (markdown) para tipos `doc` y `memory`
+  - Body (markdown) para todos los tipos (`memory`, `doc`, `bug`, `todo`)
 - Guardado:
   - Primero actualiza metadatos vía `PATCH /ui/api/items/{id}` con `fields`
-  - Después, si hay body y el tipo es `doc` o `memory`, lo guarda con `POST /ui/api/items/{id}/body`
+  - Después, si hay body, lo guarda con `POST /ui/api/items/{id}/body` (aplica a cualquier tipo)
   - Se usa `expected_version` para el body, evitando pisar cambios concurrentes.
 
 ## Eliminaciones y estado
@@ -58,6 +58,9 @@ ui:
 ```
 
 - La edición de metadatos sigue usando `PATCH /ui/api/items/{id}` con `fields`.
+
+## Plantillas y UX
+- El campo Meta (JSON) en el formulario “Create item” aplica automáticamente la plantilla del subtipo seleccionado al cambiar entre pestañas (Memory/Docs/Bugs/Todo), evitando que se arrastre contenido del subtipo anterior.
 
 ## Validación manual
 - Settings: guardar proyecto y ver el pill del header actualizado.
