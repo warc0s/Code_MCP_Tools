@@ -1,28 +1,25 @@
 main:
   mode: local
-
 database:
   path: data/rag.duckdb
-
+memory_database:
+  path: data/memory.sqlite3
 crawling:
   workers: 8
-  pattern: "*"
+  pattern: '*'
   max_urls: -1
   cache_mode: enabled
-
 chunking:
   max_tokens: 420
   overlap_tokens: 80
   min_chunk_tokens: 120
   preserve_code_blocks: true
   respect_headings: true
-
 embeddings:
-  model_name: "Qwen/Qwen3-Embedding-0.6B"
-  cloud_model_name: "text-embedding-3-small"
+  model_name: Qwen/Qwen3-Embedding-0.6B
+  cloud_model_name: text-embedding-3-small
   normalize_embeddings: true
-  query_prompt_name: "query"
-
+  query_prompt_name: query
 retrieval:
   dense_topk: 24
   lexical_topk: 24
@@ -33,23 +30,29 @@ retrieval:
   force_english_queries: true
   rerank_topk: 12
   enable_rerank: true
-
 reranker:
-  model_name: "Qwen/Qwen3-Reranker-0.6B"
-  cloud_model_name: "Qwen/Qwen3-Reranker-8B"
+  model_name: Qwen/Qwen3-Reranker-0.6B
+  cloud_model_name: Qwen/Qwen3-Reranker-8B
   max_length: 8192
-
 policy:
   force_english_queries: true
-
 mcp:
   cli_logs_enabled: false
   tools:
+    store_item: true
+    update_item: true
+    get_item: true
+    list_items: true
+    search_items: true
+    patch_doc: true
+    delete_item: true
+    chunks_by_url: true
+    cli_stop: true
+    hybrid_search: true
+    cli_start: true
     dense_search: false
     lexical_search: false
-    hybrid_search: true
-    chunks_by_url: true
-    cli_start: true
     cli_send: true
-    cli_stop: true
     cli_restart: true
+ui:
+  selected_project: proyect

@@ -199,6 +199,11 @@ cython_debug/
 #  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
 #  refer to https://docs.cursor.com/context/ignore-files
 .cursorignore
+
+# Local SQLite test databases (keep official memory.sqlite3)
+data/dev_memory.sqlite3
+data/test_memory.sqlite3
+.cursorignore
 .cursorindexingignore
 
 # Marimo

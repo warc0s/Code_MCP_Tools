@@ -54,6 +54,17 @@ class DuckDBManager:
         base.mkdir(parents=True, exist_ok=True)
         os.environ.setdefault("DUCKDB_EXTENSION_DIRECTORY", str(base.resolve()))
 
+    def _set_foreign_keys(self, enabled: bool) -> None:
+        conn = self._connection
+        if not conn:
+            return
+        try:
+            value = "ON" if enabled else "OFF"
+            conn.execute(f"PRAGMA foreign_keys={value};")
+        except Exception:
+            # Algunas versiones de DuckDB no soportan PRAGMA foreign_keys; ignoramos
+            pass
+
     def _install_extensions(self) -> None:
         conn = self._connection
         assert conn is not None
@@ -86,8 +97,6 @@ class DuckDBManager:
         if self._connection:
             self._connection.close()
             self._connection = None
-        if self.path.exists():
-            self.path.unlink()
         self._prepare_extension_directory()
         self._connection = duckdb.connect(self.path.as_posix())
         self._install_extensions()
@@ -97,6 +106,7 @@ class DuckDBManager:
         conn.execute("DROP TABLE IF EXISTS chunks;")
         conn.execute("DROP TABLE IF EXISTS docs;")
         conn.execute("DROP TABLE IF EXISTS metadata;")
+        # Nota: projects/items viven en la base SQLite de memoria; sólo se gestiona aquí el esquema RAG
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS docs (
@@ -130,6 +140,7 @@ class DuckDBManager:
             );
             """
         )
+        # 'items' ahora vive en la base SQLite de memoria; no crear índices aquí
         conn.execute("CREATE INDEX IF NOT EXISTS idx_docs_url ON docs(url);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);")
         try:
@@ -146,6 +157,7 @@ class DuckDBManager:
         except Exception:
             # Si la versión de FTS no soporta esta sintaxis, continuamos sin índice
             pass
+        # FKs permanecen activadas; no es necesario togglear para este rebuild
 
     def insert_documents(self, rows: Iterable[DocumentRow]) -> None:
         conn = self.connection
@@ -196,6 +208,5 @@ def read_metadata(connection: duckdb.DuckDBPyConnection) -> dict[str, str]:
     except Exception:
         return {}
     return {str(key): "" if value is None else str(value) for key, value in rows}
-
 
 __all__ = ["DuckDBManager", "DocumentRow", "ChunkRow", "read_metadata"]

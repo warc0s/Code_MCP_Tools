@@ -7,6 +7,6 @@ fastapi
 uvicorn
 fastmcp
 pexpect
-torch
+torch==2.4.1
 openai
 requests

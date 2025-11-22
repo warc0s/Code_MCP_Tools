@@ -27,7 +27,28 @@ class MainConfig:
 
 @dataclass(frozen=True)
 class DatabaseConfig:
+    """DuckDB configuration for the RAG store.
+
+    Backwards compatible: this used to be the only DB. It now represents the
+    RAG database (DuckDB).
+    """
     path: Path = Path("data/rag.duckdb")
+
+    def __post_init__(self) -> None:
+        p = self.path
+        if isinstance(p, str):
+            object.__setattr__(self, "path", Path(p))
+
+
+@dataclass(frozen=True)
+class MemoryDatabaseConfig:
+    """SQLite configuration for the memory/projects/items store."""
+    path: Path = Path("data/memory.sqlite3")
+
+    def __post_init__(self) -> None:
+        p = self.path
+        if isinstance(p, str):
+            object.__setattr__(self, "path", Path(p))
 
 
 @dataclass(frozen=True)
@@ -90,9 +111,19 @@ class MCPConfig:
 
 
 @dataclass(frozen=True)
+class UIConfig:
+    """User-interface related settings that should not require restart.
+
+    - selected_project: current project slug to operate on in the UI
+    """
+    selected_project: Optional[str] = None
+
+
+@dataclass(frozen=True)
 class AppConfig:
     main: MainConfig = field(default_factory=MainConfig)
     database: DatabaseConfig = field(default_factory=DatabaseConfig)
+    memory_database: MemoryDatabaseConfig = field(default_factory=MemoryDatabaseConfig)
     crawling: CrawlingConfig = field(default_factory=CrawlingConfig)
     chunking: ChunkingConfig = field(default_factory=ChunkingConfig)
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
@@ -100,6 +131,7 @@ class AppConfig:
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
     policy: PolicyConfig = field(default_factory=PolicyConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
+    ui: UIConfig = field(default_factory=UIConfig)
 
     @staticmethod
     def _build_dataclass(dataclass_type, data: Dict[str, Any]):
@@ -120,6 +152,7 @@ class AppConfig:
         return cls(
             main=get_section("main", MainConfig),
             database=get_section("database", DatabaseConfig),
+            memory_database=get_section("memory_database", MemoryDatabaseConfig),
             crawling=get_section("crawling", CrawlingConfig),
             chunking=get_section("chunking", ChunkingConfig),
             embeddings=get_section("embeddings", EmbeddingConfig),
@@ -127,6 +160,7 @@ class AppConfig:
             reranker=get_section("reranker", RerankerConfig),
             policy=get_section("policy", PolicyConfig),
             mcp=get_section("mcp", MCPConfig),
+            ui=get_section("ui", UIConfig),
         )
 
     @classmethod
@@ -145,7 +179,9 @@ __all__ = [
     "ChunkingConfig",
     "CrawlingConfig",
     "DatabaseConfig",
+    "MemoryDatabaseConfig",
     "EmbeddingConfig",
+    "UIConfig",
     "MCPConfig",
     "MainConfig",
     "PolicyConfig",

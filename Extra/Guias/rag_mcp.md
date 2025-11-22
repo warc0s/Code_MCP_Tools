@@ -1,10 +1,17 @@
 # RAG MCP
 
+Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB para RAG y SQLite para memoria (`projects/items`). Consulta Extra/Guias/dbs_arquitectura.md.
+
 ## Arquitectura rápida
 - `config.yaml` centraliza rutas, chunking, retrieval y toggles (como MMR/reranker).
 - `utils/` aloja módulos independientes: `crawling`, `chunking`, `embeddings`, `database`, `pipeline`, `retrieval`, `reranker`.
-- La BBDD es DuckDB (`data/rag.duckdb`) con tablas `docs` y `chunks`, índices VSS (HNSW/cosine) y FTS (BM25).
+- RAG vive en DuckDB (`data/rag.duckdb`) y se recrea en rebuild (`docs`/`chunks` con índices VSS/FTS). `projects/items` viven en SQLite `data/memory.sqlite3`.
+
+## Ámbito del índice
+- El índice RAG es global (no está particionado por proyecto). Un rebuild sustituye el índice global completo con el corpus ingerido.
+- La memoria (proyectos/items) es por proyecto. La selección de proyecto impacta Memory, no el RAG.
 - `mcp_server/` define el servidor MCP basado en FastAPI y las tools declarativas en `server.py`.
+- `app.py` ahora arranca un único servidor FastAPI/uvicorn que expone el endpoint MCP (`/mcp` por defecto) y un panel web en `/` para ingesta, estado y toggles de tools sin usar la CLI.
 - `app.py` ofrece CLI: opción 1.x para reconstruir el RAG (desde sitemap o desde ficheros de URLs en `txt/`) y opción 2 para arrancar el servidor MCP.
 
 ## Modos de ejecución
@@ -28,6 +35,7 @@
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
+- `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`: tools para gestionar items por proyecto (memorias/docs/bugs/todos) con edición de docs por diff.
 - El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `mcp_server/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
 - 
@@ -72,19 +80,42 @@
 - Se arranca desde la opción 2 del CLI; muestra la URL final (`http://127.0.0.1:PUERTO/mcp`) y mantiene la conexión DuckDB en modo solo lectura.
 - Requiere que la BBDD exista previamente.
 
-## Integración con Codex CLI
-1. Arranca el servidor (`python app.py` → opción 2) para que escuche en `http://127.0.0.1:8000/mcp` (puerto configurable).
-2. Configura `~/.codex/config.toml` con:
-   ```toml
-   experimental_use_rmcp_client = true
+## Integraciones rápidas
 
-   [mcp_servers.rag_local]
+### Codex CLI
+1. Asegúrate de que el servidor escucha en `http://127.0.0.1:8000/mcp` (o tu URL).
+2. Edita `~/.codex/config.toml` y pega:
+   ```toml
+   rmcp_client = true
+
+   [mcp_servers.codeMCP_local]
    url = "http://127.0.0.1:8000/mcp"
-   startup_timeout_sec = 20
+   startup_timeout_sec = 2
    tool_timeout_sec = 60
    ```
-3. Reinicia Codex CLI y valida la conexión con `codex mcp list` o `codex mcp get rag_local`.
-4. Ajusta `url`, `startup_timeout_sec` o `tool_timeout_sec` si cambias host/puerto o necesitas tolerancia extra.
+   Ajusta `url`/timeouts según tu entorno.
+
+### Claude Code
+```bash
+claude mcp add --transport http code-mcp http://127.0.0.1:8000/mcp
+```
+Verifica con `claude mcp list`. Puedes cambiar `code-mcp` y `--scope` (`user|project|local`).
+
+### GitHub Copilot (VS Code)
+Crea `.vscode/mcp.json` en el repositorio con:
+```json
+{
+  "servers": {
+    "code-mcp": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}
+```
+Abre la paleta de comandos y ejecuta “MCP: List Servers” para verificar que aparece.
+
+Consulta también Dashboard → Integrations para snippets con tu MCP URL actual y botones de copia.
 
 ## Notas operativas
 - Se fuerza `DUCKDB_EXTENSION_DIRECTORY` a `.duckdb/extensions` para guardar FTS/VSS sin permisos root.
@@ -104,8 +135,8 @@
 ## Cómo resetear la base de datos
 
 - No es necesario borrar archivos manualmente.
-- Cada vez que eliges una opción `1.x` en `python app.py`, se elimina la base de datos actual (`data/rag.duckdb`) y se crea una nueva desde cero.
-- El nuevo índice se rellena únicamente con los documentos obtenidos del sitemap (1.1) o de las URLs del fichero seleccionado en `txt/` (1.2), sustituyendo por completo a los anteriores.
+- Cada vez que eliges una opción `1.x` en `python app.py`, se recrea el esquema RAG (`docs`/`chunks`/`metadata`) en la BD pero se preservan las tablas de `projects/items`.
+- El nuevo índice se rellena únicamente con los documentos obtenidos del sitemap (1.1) o de las URLs del fichero seleccionado en `txt/` (1.2), sustituyendo por completo a los anteriores pero dejando intactos proyectos/items.
 
 ### Conformidad MCP (junio 2025)
 - El servidor FastAPI expone `tools/list` (incluido `outputSchema`/`title`) y `tools/call` sobre HTTP/JSON-RPC compatible con los clientes MCP streamable.

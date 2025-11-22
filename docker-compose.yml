@@ -1,0 +1,15 @@
+services:
+  code-mcp-tools:
+    image: code-mcp-tools:latest
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./.cache:/app/.cache
+      - ./txt:/app/txt
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - CONTAINER_NAME=code-mcp-tools
+      - APP_HOST=0.0.0.0
+    restart: unless-stopped

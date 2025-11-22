@@ -9,9 +9,6 @@
 - **Check your work.** Prueba cada bloque nuevo y, en procesos largos, revisa logs tras 30s para confirmar avance.
 - **Be cautious with terminal commands.** Lanza solo comandos que terminen solos; los persistentes van con `nohup` u otro wrapper y evita scripts colgados.
 - **Robustez total.** Cada solución debe contemplar explícitamente edge cases y fallos operativos; prioriza mensajes claros y defensivos ante dependencias, red o inputs inesperados.
- - **Evita parches.** No desactives integridad referencial ni otras garantías del motor como solución rápida. Prefiere invariantes de esquema y cambios de esquema explícitos.
- - **Desarrollo sin apego a datos.** En esta fase no mantenemos compatibilidad con BDs antiguas. Si un cambio de esquema lo requiere, recrea la BD y el índice (se asume que no hay datos relevantes que conservar).
- - **Migraciones claras.** Cuando sea oportuno, añade migraciones idempotentes; mientras estemos en desarrollo, prioriza la simplicidad: recrear artefactos antes que introducir toggles o soluciones frágiles.
 
 ## Coding Style & Naming Conventions
 - Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
@@ -30,7 +27,6 @@
 - Crea o edita las guias actuales (Extra/Guias/...), o bien genera nuevas si es algo demasiado diferente, con cada cambio que implementes que consideres digno de anotar
 - Antes de empezar cualquier tarea, recopila toda la información disponible sobre el repositorio: revisa, lee **todas** las guías de `Extra/Guias/`, inspecciona los archivos relevantes y confirma el estado actual antes de proponer o ejecutar cambios.
 - Itera siempre guiandote por las validaciones manuales y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
-- Cada implementación debe ir acompañada de un test nuevo en la carpeta `test/` y no se considera lista hasta que las pruebas pasen en verde (ejecuta `pytest`)
 - Una vez finalices la tarea que te ha encargado el usuario y se haya comprobado que es estable y valida, preguntale al usuario si debes hacer "git add ." y commit con un comentario aclaratorio de lo añadido. Tu jamás harás push, el usuario lo hace, solo debes add y commit. SIEMPRE ESPERANDO APROBACION DEL USUARIO.
 - No ejecutes comandos git (add, commit, reset, revert, etc.) salvo que el usuario lo pida explícitamente.
 - A la hora de añadir nuevas funciones y demas en 'utils', implementalas en el .py que consideres mas adecuado O BIEN escribe uno nuevo si ninguno se amolda a lo que vas a programar.
@@ -38,4 +34,19 @@
 - La aplicación se ejecuta desde `app.py` y los imports estan en 'utils'. Respeta esto.
 - Trata que los archivos no superen las dos mil lineas de codigo
 - Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
- - Soluciones robustas, no parches: no aceptes desactivar FKs para operar; si algo requiere limpieza, actualiza el esquema, recrea la BD si es necesario y valida con pruebas.
+
+## Tools MCP rápidas
+Nota: algunas tools pueden estar desactivadas y no podrás usarlas.
+- rag: `hybrid_search` (busca denso+léxico con MMR/rerank), `chunks_by_url` (devuelve todos los chunks de una URL), `dense_search`/`lexical_search`.
+- cli: `cli_start` (lanza sesión interactiva), `cli_send` (envía input), `cli_stop` (SIGINT/SIGKILL), `cli_restart` (relanza con el comando original).
+- items (proyectos): siempre pasa `project` o `project_id`.
+  - `store_item` crea `memory/doc/bug/todo` (versión 1).
+  - `get_item` recupera uno; `list_items` filtra por tipo/estado/tags; `search_items` busca en título/cuerpo/meta.
+  - `update_item` cambia metadatos (`title`, `tags`, `status`, `meta`) y sube versión. Estados permitidos: `pending`, `in_progress`, `to_verify`, `resolved`.
+  - `patch_doc` aplica diff unificado al `body_md` de un `doc` y sube versión (opcional `expected_version`).
+  - `delete_item` elimina un item del proyecto.
+- Cuándo usar cada tipo:
+  - `memory`: decisiones de diseño, invariantes, motivos de arquitectura, mapas mentales que el agente deba recordar rápido.
+  - `doc`: documentación estructurada o extensa (arquitectura, protocolos, flujos), que editarás con `patch_doc` via diffs.
+  - `bug`: incidencias reproducibles; rellena `meta` con `severity`, `reproduction`, `logs_excerpt`, `root_cause`, `fix_summary`, `fixed_in_commit`.
+  - `todo`: tareas accionables; usa `meta.kind` (`bug_fix`, `refactor`, `feature`, `chore`), `reproduction` si aplica, `acceptance_criteria`, `priority`.

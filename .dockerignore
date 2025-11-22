@@ -1,0 +1,16 @@
+__pycache__/
+.pytest_cache/
+.mypy_cache/
+.venv/
+.idea/
+.vscode/
+*.pyc
+*.pyo
+*.pyd
+*.log
+.DS_Store
+.cache/
+.cache/
+data/
+txt/
+.duckdb/
