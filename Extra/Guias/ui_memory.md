@@ -62,6 +62,37 @@ ui:
 ## Plantillas y UX
 - El campo Meta (JSON) en el formulario “Create item” aplica automáticamente la plantilla del subtipo seleccionado al cambiar entre pestañas (Memory/Docs/Bugs/Todo), evitando que se arrastre contenido del subtipo anterior.
 
+### Campos sugeridos por tipo (Meta JSON)
+- bug:
+  - severity (high|medium|low)
+  - reproduction (pasos exactos)
+  - logs_excerpt (opcional)
+  - expected (comportamiento esperado)
+  - root_cause (causa raíz)
+  - fix_summary (opcional)
+  - fixed_in_commit (opcional)
+  - resolution_criteria (lista de checks para darlo por resuelto)
+  - screenshots (lista de URLs, opcional)
+  - related_files (lista de rutas/URLs, opcional)
+- todo:
+  - kind (bug_fix|refactor|feature|chore)
+  - reproduction (opcional)
+  - acceptance_criteria (lista)
+  - dependencies (lista)
+  - priority (p0|p1|p2)
+  - related_files (lista de rutas/URLs, opcional)
+- doc:
+  - authors ([])
+  - source_url
+  - related_docs ([])
+  - version_notes
+- memory:
+  - topic
+  - decision
+  - context
+  - rationale
+  - related_links ([])
+
 ## Validación manual
 - Settings: guardar proyecto y ver el pill del header actualizado.
 - Memory:

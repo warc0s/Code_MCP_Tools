@@ -49,7 +49,13 @@ def test_item_service_crud_sqlite():
         body_md="Alpha",
         tags=["a", "B"],
         status="pending",
-        meta={"k": 1},
+        meta={
+            "topic": "t",
+            "decision": "d",
+            "context": "c",
+            "rationale": "r",
+            "related_links": [],
+        },
     )
     assert rec.project_slug == "test-proj"
     assert rec.version == 1

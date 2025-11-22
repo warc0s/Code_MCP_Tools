@@ -13,6 +13,7 @@ from typing import Any, Dict, Iterable, List, Optional
 import sqlite3
 
 from utils.config import MemoryDatabaseConfig
+from utils.item_meta import validate_meta
 
 ALLOWED_ITEM_TYPES = {"memory", "doc", "bug", "todo"}
 ALLOWED_STATUSES = {"pending", "in_progress", "to_verify", "resolved"}
@@ -338,7 +339,8 @@ class ItemService:
         # Require an existing project; do not auto-create on store
         project_db_id, project_slug, project_name = self._ensure_project(project, project_id, create_missing=False)
         item_id = uuid.uuid4().hex
-        payload_meta = meta or {}
+        # Validate and normalize meta against pydantic models per type
+        payload_meta = validate_meta(item_type, meta or {})
         with self._connect() as conn:
             conn.execute(
                 """
@@ -421,8 +423,9 @@ class ItemService:
             updates.append("status = ?")
             params.append(_validate_status(fields.get("status")))
         if "meta" in fields:
+            normalized_meta = validate_meta(item_type=self.get_item(project=project, project_id=project_id, item_id=item_id).type, meta=fields.get("meta") or {})
             updates.append("meta = ?")
-            params.append(json.dumps(fields.get("meta") or {}))
+            params.append(json.dumps(normalized_meta))
         if not updates:
             raise ValueError("'fields' contains no updatable properties.")
         updates.append("version = version + 1")

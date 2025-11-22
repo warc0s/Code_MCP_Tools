@@ -10,6 +10,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 from utils.cli_sessions import restart_session, send_input, start_session, stop_session
 from utils.items import ItemService
+from utils.item_meta import meta_json_schema_oneof
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +263,7 @@ class RAGToolset:
                         "body_md": {"type": "string"},
                         "tags": {"type": "array", "items": {"type": "string"}},
                         "status": {"type": "string"},
-                        "meta": {"type": "object"},
+                        "meta": meta_json_schema_oneof(),
                     },
                     "required": ["type", "title"],
                 },
@@ -277,7 +278,15 @@ class RAGToolset:
                         "project": {"type": "string"},
                         "project_id": {"type": "string"},
                         "id": {"type": "string"},
-                        "fields": {"type": "object"},
+                        "fields": {
+                            "type": "object",
+                            "properties": {
+                                "title": {"type": "string"},
+                                "tags": {"type": "array", "items": {"type": "string"}},
+                                "status": {"type": "string"},
+                                "meta": meta_json_schema_oneof(),
+                            },
+                        },
                     },
                     "required": ["id", "fields"],
                 },

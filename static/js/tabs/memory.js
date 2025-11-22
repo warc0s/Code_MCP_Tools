@@ -8,24 +8,31 @@ function getMetaTemplate(type) {
   switch ((type || '').toLowerCase()) {
     case 'bug':
       return JSON.stringify({
-        severity: 'high|medium|low',
+        severity: 'medium',
         reproduction: 'steps to reproduce... (#1, #2, #3)',
         logs_excerpt: 'copy here the most relevant log lines',
         expected: 'what should have happened instead',
         root_cause: 'short summary of the root cause',
         fix_summary: 'what should we change and why',
         fixed_in_commit: '',
+        resolution_criteria: [
+          'criterion 1 (e.g., tests green)',
+          'criterion 2 (e.g., no errors in console)',
+        ],
+        screenshots: [],
+        related_files: [],
       }, null, 2);
     case 'todo':
       return JSON.stringify({
-        kind: 'bug_fix|refactor|feature|chore',
+        kind: 'feature',
         reproduction: 'optional, only for bug-like tasks',
         acceptance_criteria: [
           'criterion 1',
           'criterion 2',
         ],
         dependencies: [],
-        priority: 'p0|p1|p2',
+        priority: 'p2',
+        related_files: [],
       }, null, 2);
     case 'doc':
       return JSON.stringify({
@@ -49,9 +56,9 @@ function getMetaTemplate(type) {
 function getMetaHelp(type) {
   switch ((type || '').toLowerCase()) {
     case 'bug':
-      return 'Suggested fields: severity (high|medium|low), reproduction (steps), logs_excerpt, expected, root_cause, fix_summary, fixed_in_commit. You can add or remove fields freely.';
+      return 'Suggested fields: severity (high|medium|low), reproduction (steps), logs_excerpt (optional), expected, root_cause, fix_summary (optional), fixed_in_commit (optional), resolution_criteria (list), screenshots (URLs, optional), related_files (list, optional). You can add or remove fields freely.';
     case 'todo':
-      return 'Suggested fields: kind (bug_fix|refactor|feature|chore), reproduction (optional), acceptance_criteria (list), dependencies (list), priority (p0|p1|p2). You can add or remove fields freely.';
+      return 'Suggested fields: kind (bug_fix|refactor|feature|chore), reproduction (optional), acceptance_criteria (list), dependencies (list), priority (p0|p1|p2), related_files (list, optional). You can add or remove fields freely.';
     case 'doc':
       return 'Suggested fields: authors, source_url, related_docs, version_notes. You can add or remove fields freely.';
     case 'memory':

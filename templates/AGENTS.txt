@@ -15,6 +15,7 @@
 - Validación dual obligatoria: además de `pytest`, lanza un navegador real vía MCP Chrome DevTools y recorre los flujos tocados (UI). No des por concluido el trabajo hasta tener verde en pruebas y verificación manual en Chrome.
 - Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest → UI con DevTools) hasta conseguir estabilidad.
 - Usa las checklists opcionales (pytest/UI/Context7/MCP externos) desde Dashboard → AGENTS.md para adaptar el alcance de validación según el cambio.
+- Si detectas un bug, captura siempre que sea posible logs y/o una screenshot en PNG: ver más abajo (Memoria operativa) para campos y cómo guardar la imagen.
 
 ## Coding Style & Naming Conventions
 - Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
@@ -43,8 +44,23 @@
 ## Memoria operativa (items)
 - `memory`: decisiones de diseño, invariantes, convenciones duras (naming, patrones que no se rompen), razones de arquitectura, mapas mentales breves y antipatrones detectados. Úsalo para atajos que el agente debe recordar antes de tocar código.
 - `doc`: manuales o flujos largos (arquitectura, APIs, protocolos, pasos de despliegue), ejemplos reproducibles, listas de comandos; edita con `patch_doc` (diffs) para mantener historia limpia.
-- `bug`: incidencias reproducibles o P0 sospechados; siempre documenta entorno, pasos exactos, comportamiento esperado/observado, logs clave y severidad; actualiza con root cause, fix plan y commit/fix cuando cierre.
-- `todo`: tareas accionables; marca `meta.kind` (`bug_fix`, `refactor`, `feature`, `chore`), prioridad y criterios de aceptación. Divide si la tarea crece.
+- `bug`: incidencias reproducibles o P0 sospechados; documenta entorno, pasos exactos y comportamiento esperado/observado; añade meta con:
+  - `severity` (`high|medium|low`), `reproduction` (pasos exactos), `expected`, `root_cause`
+  - opcionales: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (lista), `screenshots` (lista de URLs), `related_files` (lista)
+  - MUY recomendado añadir logs y/o una screenshot (PNG) cuando sea posible
+- `todo`: tareas accionables; meta con `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (lista), `dependencies` (lista), `priority` (`p0|p1|p2`). Divide si la tarea crece.
+  - opcional: `related_files` (lista de rutas/URLs)
+
+### Campos meta sugeridos (validados)
+- `memory` (meta): `topic`, `decision`, `context`, `rationale`, `related_links` ([])
+- `doc` (meta): `authors` ([]), `source_url`, `related_docs` ([]), `version_notes`
+- `bug` (meta): ver lista anterior (logs y screenshots opcionales, pero recomendados)
+- `todo` (meta): ver lista anterior
+
+### Screenshots y logs (recomendación)
+- Screenshot (PNG) local para bugs: guarda el archivo dentro del repositorio, por ejemplo en `static/uploads/bugs/<slug>.png`.
+- Sirve la imagen desde la app en `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png` y añade esa URL a `meta.screenshots`.
+- Puedes tomar la captura con MCP Chrome DevTools (viewport) y guardarla como PNG en esa ruta; si no procede captura, adjunta al menos `logs_excerpt` y describe los pasos de reproducción.
 
 ### Cuándo crear o actualizar
 - Crea `memory` cuando tomes una decisión estructural, detectes un pitfall recurrente o acuerdes un invariante (p.ej., “no usar llm X sin cache”, “todas las rutas pasan por middleware Y”). Refresca o fusiona si hay duplicados; mantén corto y accionable.

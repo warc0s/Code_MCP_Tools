@@ -16,3 +16,13 @@ def test_todo_template_includes_dependencies_field():
     js = Path('static/js/tabs/memory.js').read_text(encoding='utf-8')
     assert 'dependencies: []' in js
 
+
+def test_bug_template_includes_resolution_and_screenshots():
+    js = Path('static/js/tabs/memory.js').read_text(encoding='utf-8')
+    assert 'resolution_criteria' in js
+    assert 'screenshots' in js
+    assert 'related_files' in js
+
+def test_todo_template_includes_related_files():
+    js = Path('static/js/tabs/memory.js').read_text(encoding='utf-8')
+    assert 'related_files' in js

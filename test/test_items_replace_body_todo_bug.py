@@ -37,7 +37,12 @@ def test_replace_body_works_for_todo_and_bug():
         body_md="alpha",
         tags=["p2"],
         status="pending",
-        meta={"priority": 2},
+        meta={
+            "kind": "feature",
+            "acceptance_criteria": ["tests"],
+            "dependencies": [],
+            "priority": "p2",
+        },
     )
     bug = svc.store_item(
         project="proj-x",
@@ -47,7 +52,12 @@ def test_replace_body_works_for_todo_and_bug():
         body_md="beta",
         tags=["sev:low"],
         status="pending",
-        meta={"severity": "low"},
+        meta={
+            "severity": "low",
+            "reproduction": "open, click y, error",
+            "expected": "no error",
+            "root_cause": "null ref",
+        },
     )
 
     # replace_body bumps version for any type
@@ -55,4 +65,3 @@ def test_replace_body_works_for_todo_and_bug():
     assert todo2.version == 2 and todo2.body_md == "alpha2"
     bug2 = svc.replace_body(project="proj-x", project_id=None, item_id=bug.id, new_body="beta2", expected_version=1)
     assert bug2.version == 2 and bug2.body_md == "beta2"
-
