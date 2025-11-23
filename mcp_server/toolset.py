@@ -206,6 +206,7 @@ class RAGToolset:
                         "prompt_pattern": {"type": "string"},
                         "timeout": {"type": "number", "minimum": 0},
                         "env": {"type": "object"},
+                        "max_bytes": {"type": "integer", "minimum": 1},
                     },
                     "required": ["command"],
                 },
@@ -220,6 +221,7 @@ class RAGToolset:
                         "session_id": {"type": "string"},
                         "text": {"type": "string"},
                         "timeout": {"type": "number", "minimum": 0},
+                        "max_bytes": {"type": "integer", "minimum": 1},
                     },
                     "required": ["session_id", "text"],
                 },
@@ -488,6 +490,7 @@ class RAGToolset:
                     prompt_pattern=payload.get("prompt_pattern"),
                     env=payload.get("env"),
                     timeout=float(payload.get("timeout", 1.5)),
+                    max_bytes=int(payload.get("max_bytes", 16000)),
                     log_enabled=self.cli_logs_enabled,
                 )
             elif name == "cli_send":
@@ -495,6 +498,7 @@ class RAGToolset:
                     session_id=payload["session_id"],
                     text=payload.get("text", ""),
                     timeout=float(payload.get("timeout", 1.5)),
+                    max_bytes=int(payload.get("max_bytes", 16000)),
                 )
             elif name == "cli_stop":
                 results = stop_session(

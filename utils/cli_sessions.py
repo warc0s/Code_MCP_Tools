@@ -1,5 +1,19 @@
 """
-Gestión de sesiones de CLI interactivas usando pexpect.
+Gestión de sesiones de CLI interactivas usando pexpect (backend único pexpect-only).
+
+Endurecimientos clave:
+- Drainer en background por sesión que lee del PTY de forma continua y acumula en
+  un ring buffer en memoria, limitado por bytes (best-effort, sin bloquear).
+- `last_activity` real por sesión y limpieza periódica.
+- Señales más robustas: interrupción suave (Ctrl+C) y parada con señales al grupo
+  de procesos; tolera EOF y EIO en macOS.
+- Tamaño de TTY configurable por defecto (reduce wraps raros en CLIs).
+
+Notas:
+- La API pública (start_session, send_input, stop_session, restart_session) se
+  mantiene estable. Se añade soporte de `max_bytes` para limitar la lectura por
+  llamada (delta desde el último pull) y se mejora la detección de prompt
+  desacoplándola de los logs.
 """
 
 from __future__ import annotations
@@ -11,13 +25,24 @@ import time
 import uuid
 import shlex
 from dataclasses import dataclass, field
+from collections import deque
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
 import pexpect
+import errno
+import threading
 import re as _re
 
 LOG_DIR = Path("data/cli_sessions")
+# Tamaños y límites por defecto
+DEFAULT_RING_MAX_BYTES = int(os.getenv("CLI_RING_BUFFER_MAX_BYTES", str(512 * 1024)))  # 512 KiB
+DEFAULT_RING_MAX_BYTES_HIGH = int(os.getenv("CLI_RING_BUFFER_MAX_BYTES_HIGH", str(2 * 1024 * 1024)))  # 2 MiB
+READ_CHUNK_BYTES = int(os.getenv("CLI_READ_CHUNK_BYTES", str(32 * 1024)))  # 32 KiB por lectura
+DEFAULT_INACTIVITY_TTL = int(os.getenv("CLI_INACTIVITY_TTL_SEC", str(30 * 60)))  # 30 minutos
+MAX_SESSIONS = int(os.getenv("CLI_MAX_SESSIONS", "8"))
+DEFAULT_TTY_ROWS = int(os.getenv("CLI_TTY_ROWS", "40"))
+DEFAULT_TTY_COLS = int(os.getenv("CLI_TTY_COLS", "120"))
 DEPENDENCY_MARKERS = (
     "modulenotfounderror",
     "no module named",
@@ -203,6 +228,16 @@ class CLISession:
     batch_queries: Optional[list[str]] = None
     prompt_pattern: Optional[str] = None
     created_at: float = field(default_factory=time.time)
+    # Ring buffer (pendiente de enviar al cliente) y sincronización
+    pending_chunks: deque[str] = field(default_factory=deque)
+    pending_bytes: int = 0
+    max_buffer_bytes: int = DEFAULT_RING_MAX_BYTES
+    last_activity: float = field(default_factory=time.time)
+    rows: int = DEFAULT_TTY_ROWS
+    cols: int = DEFAULT_TTY_COLS
+    reader_thread: Optional[threading.Thread] = None
+    stop_event: threading.Event = field(default_factory=threading.Event)
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
     def is_alive(self) -> bool:
         return self.process.isalive()
@@ -217,8 +252,110 @@ class CLISession:
             # No interferir con el flujo si fallan los logs.
             pass
 
+    def append_output(self, text: str) -> None:
+        if not text:
+            return
+        with self.lock:
+            self.pending_chunks.append(text)
+            self.pending_bytes += len(text.encode("utf-8", errors="ignore"))
+            # Recorta por tamaño máximo, descartando lo más antiguo
+            while self.pending_bytes > self.max_buffer_bytes and self.pending_chunks:
+                old = self.pending_chunks.popleft()
+                self.pending_bytes -= len(old.encode("utf-8", errors="ignore"))
+            self.last_activity = time.time()
+
+    def pull_output(self, max_bytes: int) -> str:
+        """Devuelve y limpia hasta max_bytes de la cola pendiente.
+
+        Si hay más de max_bytes pendientes, se devuelven los primeros max_bytes y
+        se conserva el excedente para lecturas futuras.
+        """
+        with self.lock:
+            if self.pending_bytes <= 0 or not self.pending_chunks:
+                return ""
+            out_parts: list[str] = []
+            budget = max(1, int(max_bytes))
+            # Consumir trozos mientras haya presupuesto
+            while self.pending_chunks and budget > 0:
+                chunk = self.pending_chunks[0]
+                chunk_bytes = len(chunk.encode("utf-8", errors="ignore"))
+                if chunk_bytes <= budget:
+                    out_parts.append(chunk)
+                    self.pending_chunks.popleft()
+                    self.pending_bytes -= chunk_bytes
+                    budget -= chunk_bytes
+                else:
+                    # Tomar una porción del chunk y dejar el resto en cabeza
+                    # Convertimos a bytes para cortar exacto por bytes y decodificamos tolerante
+                    raw = chunk.encode("utf-8", errors="ignore")
+                    part = raw[:budget]
+                    rest = raw[budget:]
+                    out_parts.append(part.decode("utf-8", errors="ignore"))
+                    self.pending_chunks[0] = rest.decode("utf-8", errors="ignore")
+                    self.pending_bytes -= len(part)
+                    budget = 0
+            return "".join(out_parts)
+
+    def mark_activity(self) -> None:
+        self.last_activity = time.time()
+
 
 SESSIONS: Dict[str, CLISession] = {}
+
+
+def _start_reader_thread(session: CLISession) -> None:
+    """
+    Inicia un hilo lector que drena el PTY de la sesión y vuelca en el ring buffer.
+    Maneja EOF y EIO (común en ptys al cerrar) como fin normal.
+    """
+    def _reader() -> None:
+        try:
+            # Ajuste de tamaño del TTY para reducir wraps raros
+            try:
+                session.process.setwinsize(session.rows, session.cols)
+            except Exception:
+                pass
+            while not session.stop_event.is_set():
+                # Si el proceso ya no está vivo, intentamos una última lectura y salimos
+                if not session.is_alive():
+                    try:
+                        chunk = session.process.read_nonblocking(size=READ_CHUNK_BYTES, timeout=0.2)
+                        if chunk:
+                            session.append_output(chunk)
+                            if session.log_enabled:
+                                session.append_log(chunk)
+                    except (pexpect.EOF, pexpect.TIMEOUT):
+                        pass
+                    except OSError as exc:
+                        if getattr(exc, "errno", None) == errno.EIO:
+                            # Tratar EIO como EOF del PTY
+                            pass
+                    break
+                try:
+                    chunk = session.process.read_nonblocking(size=READ_CHUNK_BYTES, timeout=0.4)
+                    if chunk:
+                        session.append_output(chunk)
+                        if session.log_enabled:
+                            session.append_log(chunk)
+                    else:
+                        # Nada leído, pequeño respiro
+                        time.sleep(0.05)
+                except pexpect.TIMEOUT:
+                    # Sin datos este ciclo
+                    continue
+                except pexpect.EOF:
+                    break
+                except OSError as exc:
+                    if getattr(exc, "errno", None) == errno.EIO:
+                        break
+                    # Otros errores: evitar bloquear el hilo
+                    break
+        finally:
+            session.stop_event.set()
+
+    t = threading.Thread(target=_reader, name=f"cli-reader-{session.session_id}", daemon=True)
+    session.reader_thread = t
+    t.start()
 
 
 def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]:
@@ -229,10 +366,19 @@ def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]
         return tokens
 
     script_index: Optional[int] = None
+    # Caso directo: se invoca el intérprete con un script .py directamente
     if tokens[0].endswith(".py"):
         script_index = 0
-    elif len(tokens) >= 2 and tokens[0].startswith("python"):
-        script_index = 1
+    # Caso 'python ... <script>.py ...' → localizar el primer token .py
+    elif tokens[0].startswith("python"):
+        for i in range(1, len(tokens)):
+            tok = tokens[i]
+            # Evitar flags como -c/-m/-u etc.
+            if tok.startswith("-"):
+                continue
+            if tok.endswith(".py"):
+                script_index = i
+                break
 
     if script_index is None:
         return tokens
@@ -276,49 +422,44 @@ def _prepare_command(command: str, conda_env: Optional[str], workdir: Optional[s
     return "bash", ["-lc", base_cmd]
 
 
-def _cleanup_sessions(max_age_seconds: int = 1800) -> None:
+def _cleanup_sessions(max_age_seconds: int = DEFAULT_INACTIVITY_TTL) -> None:
     """
     Cierra procesos muertos o muy antiguos para evitar fugas y cuelgues.
     """
     now = time.time()
     for session_id, session in list(SESSIONS.items()):
-        expired = (now - session.created_at) > max_age_seconds
+        # Usar last_activity para GC más justo
+        expired = (now - session.last_activity) > max_age_seconds
         if not session.is_alive() or expired:
             try:
+                session.stop_event.set()
+                if session.reader_thread and session.reader_thread.is_alive():
+                    session.reader_thread.join(timeout=0.5)
                 session.process.close(force=True)
             except Exception:
                 pass
             SESSIONS.pop(session_id, None)
 
 
-def _drain_output(session: CLISession, timeout: float = 1.5, max_bytes: int = 16000) -> Tuple[str, bool]:
+def _drain_output_pull(session: CLISession, timeout: float, max_bytes: int) -> Tuple[str, bool]:
     """
-    Lee la salida disponible sin bloquear más allá del timeout.
-    Devuelve el texto acumulado y si se detecta prompt.
+    Espera hasta `timeout` para acumular salida nueva en el ring buffer y devuelve
+    hasta `max_bytes` del delta pendiente. Marca awaiting_input por heurística.
     """
-    output_chunks = []
-    end_time = time.time() + max(timeout, 0.1)
-    bytes_read = 0
+    deadline = time.time() + max(0.0, float(timeout))
+    # Espera activa breve: sal si ya hay datos o al expirar
+    while time.time() < deadline:
+        with session.lock:
+            have_data = session.pending_bytes > 0
+        if have_data:
+            break
+        # Si el proceso ya terminó y no hay datos, salir
+        if not session.is_alive():
+            break
+        time.sleep(0.05)
+    text = session.pull_output(max_bytes=max_bytes)
     awaiting_input = False
-
-    while time.time() < end_time and bytes_read < max_bytes:
-        remaining = end_time - time.time()
-        try:
-            chunk = session.process.read_nonblocking(size=1024, timeout=max(remaining, 0.1))
-            if not chunk:
-                continue
-            output_chunks.append(chunk)
-            bytes_read += len(chunk.encode("utf-8", errors="ignore"))
-        except pexpect.TIMEOUT:
-            break
-        except pexpect.EOF:
-            break
-        except Exception:
-            break
-
-    text = "".join(output_chunks)
-    if text and session.log_enabled:
-        session.append_log(text)
+    if text:
         awaiting_input = _detect_prompt(text, prompt_pattern=session.prompt_pattern)
     elif session.is_alive():
         awaiting_input = True
@@ -340,6 +481,8 @@ def start_session(
     Inicia una sesión CLI interactiva y devuelve la salida inicial.
     """
     _cleanup_sessions()
+    if len(SESSIONS) >= MAX_SESSIONS:
+        raise RuntimeError("Número máximo de sesiones alcanzado. Cierra alguna antes de abrir otra.")
     cleaned = (command or "").strip()
     if not cleaned:
         raise ValueError("Debes proporcionar un comando para iniciar la sesión.")
@@ -396,7 +539,10 @@ def start_session(
         prompt_pattern=prompt_pattern,
     )
     SESSIONS[session_id] = session
-    output, awaiting_input = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+    # Ajustar TTY y arrancar drainer
+    _start_reader_thread(session)
+    # Esperar un poco y devolver delta acumulado
+    output, awaiting_input = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
     alive = session.is_alive()
     hints = _enrich_hints(
         _build_status_hint(alive=alive, awaiting_input=awaiting_input),
@@ -426,7 +572,7 @@ def send_input(
     if not session:
         raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
     if not session.is_alive():
-        output, _ = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+        output, _ = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
         hints = _enrich_hints(
             _build_status_hint(alive=False, awaiting_input=False),
             output,
@@ -443,7 +589,8 @@ def send_input(
             **hints,
         }
     session.process.sendline(text or "")
-    output, awaiting_input = _drain_output(session, timeout=timeout, max_bytes=max_bytes)
+    session.mark_activity()
+    output, awaiting_input = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
     alive = session.is_alive()
     hints = _enrich_hints(
         _build_status_hint(alive=alive, awaiting_input=awaiting_input),
@@ -468,23 +615,53 @@ def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict
         raise ValueError("Sesión no encontrada.")
     if session.is_alive():
         try:
-            if kill:
-                session.process.kill(signal.SIGKILL)
-            else:
-                session.process.kill(signal.SIGINT)
+            # Intento de parada suave: Ctrl+C al TTY
+            if not kill:
+                try:
+                    session.process.sendintr()
+                except Exception:
+                    pass
+                time.sleep(0.2)
+            # Señales al grupo de procesos para asegurar cierre de hijos
+            try:
+                pgid = os.getpgid(session.process.pid)
+                if kill:
+                    os.killpg(pgid, signal.SIGKILL)
+                else:
+                    # Secuencia suave: SIGHUP -> SIGTERM
+                    os.killpg(pgid, signal.SIGHUP)
+                    time.sleep(0.15)
+                    if session.is_alive():
+                        os.killpg(pgid, signal.SIGTERM)
+            except Exception:
+                # Fallback: matar solo el pid
+                try:
+                    if kill:
+                        os.kill(session.process.pid, signal.SIGKILL)
+                    else:
+                        os.kill(session.process.pid, signal.SIGTERM)
+                except Exception:
+                    pass
         except Exception:
             pass
-        try:
-            session.process.close(force=True)
-        except Exception:
-            pass
+        finally:
+            session.stop_event.set()
+            try:
+                if session.reader_thread and session.reader_thread.is_alive():
+                    session.reader_thread.join(timeout=0.5)
+            except Exception:
+                pass
+            try:
+                session.process.close(force=True)
+            except Exception:
+                pass
     else:
         try:
             session.process.close(force=True)
         except Exception:
             pass
-    # Intentar drenar salida final
-    output, _ = _drain_output(session, timeout=0.5, max_bytes=8000)
+    # Intentar devolver delta pendiente final (si lo hubiera)
+    output, _ = _drain_output_pull(session, timeout=0.2, max_bytes=8000)
     hints = _enrich_hints(
         _build_status_hint(alive=False, awaiting_input=False),
         output,

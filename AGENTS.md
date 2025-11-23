@@ -60,5 +60,27 @@
 - La aplicación se ejecuta desde `app.py` y los imports estan en 'utils'. Respeta esto.
 - Trata que los archivos no superen las dos mil lineas de codigo
 - Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
+
+## Agente experto externo (con acceso a internet)
+
+- El usuario dispone de un agente externo con acceso a internet que puedes solicitar en cualquier momento. Úsalo cuando un análisis experto pueda ahorrarte tiempo o evitar decisiones obsoletas. Escribe un prompt claro, compártelo con el usuario para que lo envíe y espera su respuesta antes de aplicar cambios.
+
+- Cuándo pedirlo
+  - Decisiones de arquitectura y diseño (patrones, límites, contratos de API).
+  - Comparativas serias de soluciones/librerías/servidores MCP y sus trade‑offs.
+  - Seguridad (políticas, whitelists/flags, límites de recursos, auditoría).
+  - Cross‑platform (WSL, macOS, Windows/ConPTY), TTY, señales, rendimiento/robustez.
+  - Elección de dependencias y roadmaps (evitar arquitecturas obsoletas desde el minuto uno).
+
+- Cómo usarlo
+  - Escribe un prompt claro con el contexto y las restricciones y pásaselo al usuario para que lo envíe a este agente; espera su respuesta antes de ejecutar cambios.
+  - Pide entregables accionables: resumen ejecutivo, comparativa, plan por pasos y recomendaciones.
+  - No dudes en pedirlo si puede ahorrarte horas de investigación y evita sobrediseño.
+
+- Buenas prácticas
+  - Define claramente contexto, objetivos, restricciones y criterios de éxito.
+  - Solicita riesgos, alternativas y “no hacer” con justificación.
+  - Documenta decisiones y próximos pasos de forma breve y accionable.
+  - Úsalo para dudas con impacto; evita consultas mecánicas.
  - Soluciones robustas, no parches: no aceptes desactivar FKs para operar; si algo requiere limpieza, actualiza el esquema, recrea la BD si es necesario y valida con pruebas.
  - No ejecutes `python app.py` ni levantes la aplicación tú: asume que el usuario la tiene corriendo. Para validaciones manuales, usa MCP Chrome DevTools apuntando a la URL base sin prefijos adicionales (p. ej., `http://127.0.0.1:8000/`).

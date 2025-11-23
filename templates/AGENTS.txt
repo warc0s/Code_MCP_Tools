@@ -41,6 +41,28 @@
 - Trata que los archivos no superen las dos mil lineas de codigo
 - Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
 
+## Agente experto externo (con acceso a internet)
+
+- El usuario dispone de un agente externo con acceso a internet que puedes solicitar en cualquier momento. Úsalo cuando un análisis experto pueda ahorrarte tiempo o evitar decisiones obsoletas. Escribe un prompt claro, compártelo con el usuario para que lo envíe y espera su respuesta antes de aplicar cambios.
+
+- Cuándo pedirlo
+  - Decisiones de arquitectura y diseño (patrones, límites, contratos de API).
+  - Comparativas de soluciones, librerías o servidores MCP y sus trade‑offs.
+  - Seguridad (políticas, whitelists/flags, límites de recursos, auditoría).
+  - Cross‑platform (WSL, macOS, Windows/ConPTY), TTY, señales, rendimiento.
+  - Elección de dependencias y roadmaps (evitar arquitecturas obsoletas desde el inicio).
+
+- Cómo usarlo
+  - Escribe un prompt claro con contexto, objetivos y restricciones.
+  - Entrégalo al usuario para que lo pegue en un LLM con acceso a internet y espera la respuesta antes de cambiar código.
+  - Pide entregables accionables: resumen ejecutivo, comparativa, plan por pasos y recomendaciones.
+
+- Buenas prácticas
+  - Define claramente contexto, objetivos y criterios de éxito.
+  - Solicita riesgos, alternativas y “no hacer” con justificación.
+  - Documenta decisiones y próximos pasos de forma breve y accionable.
+  - Úsalo para dudas con impacto; evita consultas mecánicas.
+
 ## Memoria operativa (items)
 - `memory`: decisiones de diseño, invariantes, convenciones duras (naming, patrones que no se rompen), razones de arquitectura, mapas mentales breves y antipatrones detectados. Úsalo para atajos que el agente debe recordar antes de tocar código.
 - `doc`: manuales o flujos largos (arquitectura, APIs, protocolos, pasos de despliegue), ejemplos reproducibles, listas de comandos; edita con `patch_doc` (diffs) para mantener historia limpia.
