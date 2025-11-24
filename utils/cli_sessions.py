@@ -43,6 +43,7 @@ DEFAULT_INACTIVITY_TTL = int(os.getenv("CLI_INACTIVITY_TTL_SEC", str(30 * 60))) 
 MAX_SESSIONS = int(os.getenv("CLI_MAX_SESSIONS", "8"))
 DEFAULT_TTY_ROWS = int(os.getenv("CLI_TTY_ROWS", "40"))
 DEFAULT_TTY_COLS = int(os.getenv("CLI_TTY_COLS", "120"))
+DEFAULT_CLEANUP_GRACE_SEC = float(os.getenv("CLI_CLEANUP_GRACE_SEC", "2.0"))
 DEPENDENCY_MARKERS = (
     "modulenotfounderror",
     "no module named",
@@ -167,16 +168,16 @@ def _build_status_hint(alive: bool, awaiting_input: bool) -> Dict[str, str]:
     if not alive:
         return {
             "status_hint": "Sesión terminada.",
-            "next_step": "Reinicia con cli_restart o lanza una nueva con cli_start.",
+            "next_step": "Restart with python_cli_restart or start a new one with python_cli_start.",
         }
     if awaiting_input:
         return {
             "status_hint": "Esperando tu entrada.",
-            "next_step": "Envía la opción o comando con cli_send.",
+            "next_step": "Send input with python_cli_send.",
         }
     return {
         "status_hint": "Proceso en curso, aún no pide entrada.",
-        "next_step": "Llama de nuevo a cli_send (puede ser texto vacío) tras unos segundos para leer más salida.",
+        "next_step": "Call python_cli_send again (empty text allowed) after a few seconds to read more output.",
     }
 
 
@@ -430,7 +431,19 @@ def _cleanup_sessions(max_age_seconds: int = DEFAULT_INACTIVITY_TTL) -> None:
     for session_id, session in list(SESSIONS.items()):
         # Usar last_activity para GC más justo
         expired = (now - session.last_activity) > max_age_seconds
-        if not session.is_alive() or expired:
+        alive = False
+        try:
+            alive = session.is_alive()
+        except Exception:
+            alive = False
+
+        # Gracia: no borrar por 'not alive' si la sesión es muy reciente
+        if not expired and not alive:
+            age = now - getattr(session, "created_at", now)
+            if age < DEFAULT_CLEANUP_GRACE_SEC:
+                continue
+
+        if expired or not alive:
             try:
                 session.stop_event.set()
                 if session.reader_thread and session.reader_thread.is_alive():
@@ -476,6 +489,7 @@ def start_session(
     timeout: float = 1.5,
     max_bytes: int = 16000,
     log_enabled: bool = True,
+    ring_max_bytes: Optional[int] = None,
 ) -> Dict[str, object]:
     """
     Inicia una sesión CLI interactiva y devuelve la salida inicial.
@@ -538,6 +552,8 @@ def start_session(
         batch_queries=batch_queries,
         prompt_pattern=prompt_pattern,
     )
+    if ring_max_bytes and isinstance(ring_max_bytes, int) and ring_max_bytes > 0:
+        session.max_buffer_bytes = int(ring_max_bytes)
     SESSIONS[session_id] = session
     # Ajustar TTY y arrancar drainer
     _start_reader_thread(session)
@@ -567,8 +583,12 @@ def send_input(
     timeout: float = 1.5,
     max_bytes: int = 16000,
 ) -> Dict[str, object]:
-    _cleanup_sessions()
+    # Buscar primero sin limpiar para evitar borrar una sesión recién creada por error
     session = SESSIONS.get(session_id)
+    if not session:
+        # Hacer una limpieza y reintentar localizar la sesión (un solo intento)
+        _cleanup_sessions()
+        session = SESSIONS.get(session_id)
     if not session:
         raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
     if not session.is_alive():

@@ -34,7 +34,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - `lexical_search`: BM25 vía `fts_main_chunks` + `bm25(...)`.
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
-- `cli_start`, `cli_send`, `cli_stop`, `cli_restart`: manejo de sesiones CLI interactivas (ver `Extra/Guias/cli_interactiva.md`).
+- `python_cli_start`, `python_cli_send`, `python_cli_stop`, `python_cli_restart`: manejo de sesiones Python interactivas (ver `Extra/Guias/cli_interactiva.md`).
 - `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`: tools para gestionar items por proyecto (memorias/docs/bugs/todos). `store_item`/`update_item` aceptan `typed` (campos obligatorios por tipo) y `meta` opcional; `patch_doc` edita docs por diff.
 - El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `mcp_server/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:
@@ -49,10 +49,10 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 -       hybrid_search: true
 -       chunks_by_url: true
 -     cli:
--       cli_start: true
--       cli_send: true
--       cli_stop: true
--       cli_restart: true
+-       python_cli_start: true
+-       python_cli_send: true
+-       python_cli_stop: true
+-       python_cli_restart: true
 - ```
 - 
 - Usa `active_set` para elegir el conjunto expuesto; si no se especifica, se intentará usar `rag`. Si tampoco hay `tool_sets`, se exponen todas las tools por defecto.
@@ -66,10 +66,10 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 -     lexical_search: false
 -     hybrid_search: true
 -     chunks_by_url: true
--     cli_start: true
--     cli_send: true
--     cli_stop: true
--     cli_restart: true
+-     python_cli_start: true
+-     python_cli_send: true
+-     python_cli_stop: true
+-     python_cli_restart: true
 - ```
 -
 - En este modo, el servidor MCP registrará todas las tools marcadas como `true` en `mcp.tools` sin distinguir conjuntos.

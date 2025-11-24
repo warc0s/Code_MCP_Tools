@@ -12,7 +12,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 
 - **Dashboard**: estado rápido leído en tiempo real desde el backend; botones de Refresh.
   - Subpestañas: **Status**, **Integrations**, **AGENTS.md**.
-  - Status: muestra `mode`, `embedding`, `reranker`, `docs_count`, `MCP URL` completo, tools activas agrupadas por grupo (`rag`, `cli`, `items`) y tarjeta Memory con proyecto activo y contadores por tipo.
+  - Status: muestra `mode`, `embedding`, `reranker`, `docs_count`, `MCP URL` completo, tools activas agrupadas por grupo (`rag`, `python_cli`, `items`) y tarjeta Memory con proyecto activo y contadores por tipo.
     - Nota de ámbito: `docs_count` es global (RAG global). Los contadores de Memory dependen del proyecto activo.
   - Integrations: instrucciones concisas para Codex CLI, Claude Code y GitHub Copilot (VS Code) con botones de copiar y URL actual.
   - AGENTS.md: renderiza las guidelines del backend (`/ui/api/guidelines`).
@@ -21,7 +21,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
   - Settings: configurar modo (`local`/`cloud`), embeddings y reranker. Se guarda en `config.yaml`, marca `needs_restart` + `needs_rebuild`; requiere reinicio y reconstrucción del índice para aplicar.
   - Nota de ámbito: el índice RAG es global (no por proyecto). Un rebuild sustituye el índice global.
 - **Tools MCP**: gestión de tools expuestas. Los cambios al pulsar Save se guardan en `config.yaml` (rama `mcp.tools` o `mcp.tool_sets` según exista); no se aplican en caliente. El botón **Restart MCP** relanza el proceso con la config recién guardada. Los clientes MCP deben volver a llamar a `tools/list` tras el reinicio.
-  - Grupos disponibles: `rag`, `cli` y `items` (para las nuevas tools de proyectos/memories/docs/bugs/todos).
+  - Grupos disponibles: `rag`, `python_cli` y `items` (para las nuevas tools de proyectos/memories/docs/bugs/todos).
 - **Memory**: pestaña con tab interno por tipo (`memory`, `doc`, `bug`, `todo`), selección/creación de proyecto, creación de items, tablero estilo Kanban (estados `pending` → `in_progress` → `to_verify` → `resolved` con drag & drop), edición de metadatos y patch de docs con diff unificado. También permite borrar items.
   - Nota de ámbito: Memory es por proyecto; selecciona/crea el proyecto activo en Configuration → Settings.
   - Gestión de proyectos: en la tarjeta de selección de proyecto verás el listado con botones `Use` y `Delete`. No se permite borrar el proyecto activo. A partir de esta versión, el botón `Delete` se mantiene habilitado también para el proyecto activo y, al pulsarlo, la UI muestra un toast de error informando: “You cannot delete the active project. Change the selection first.” (quedando claro el motivo). Al borrar cualquier otro proyecto, se muestra doble confirmación en inglés avisando de que se eliminarán todos los items asociados (memory/doc/bug/todo) y que no hay vuelta atrás.
@@ -34,7 +34,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - Reconstrucciones bloquean concurrentes (409 si ya hay una en curso). Se cierra la conexión previa antes de regenerar la BD para evitar bloqueos, y al finalizar se recarga el retriever en caliente.
 - Si no existe la BD al iniciar, el panel sigue disponible; las tools RAG devolverán error amigable hasta que se reconstruya.
 - Sesiones CLI inactivas o muy antiguas (>30 minutos) se limpian automáticamente para evitar fugas.
-- Detección de prompt de CLI mejorada; puedes pasar `prompt_pattern` (regex) o `batch_queries` desde la tool `cli_start` para CLIs que no toleran ausencia de TTY.
+- Python CLI: sesiones orientadas a Python (script o módulo). No ejecuta shell general.
 - El tab de configuración muestra un aviso dinámico `Config changed; rebuild the index...` cuando el backend marca `needs_rebuild=true` (p. ej. tras cambiar modelos o modo desde la propia UI).
 - Durante una reconstrucción (ingesta) el header muestra un pill `Rebuilding...` y el estado se refresca automáticamente cada 2s solo mientras dura la ingesta. Al terminar se detiene el auto‑refresh y se muestra un toast de finalización.
   - También puedes pulsar “Refresh” manual cuando lo necesites.

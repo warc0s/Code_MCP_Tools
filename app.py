@@ -161,7 +161,7 @@ def _available_tools_from_config(config: AppConfig) -> Optional[list[str]]:
 
 TOOL_GROUPS = {
     "rag": ["dense_search", "lexical_search", "hybrid_search", "chunks_by_url"],
-    "cli": ["cli_start", "cli_send", "cli_stop", "cli_restart"],
+    "python_cli": ["python_cli_start", "python_cli_send", "python_cli_stop", "python_cli_restart"],
     "items": [
         "store_item",
         "update_item",

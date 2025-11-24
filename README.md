@@ -21,7 +21,7 @@ Servidor MCP + panel web orientado a **coding**: expone tools declarativas para 
     - Enforcement al resolver: bug/todo deben incluir `meta.done_summary` (≥120 chars) y `meta.related_files` (>=1).
   - La UI muestra inputs tipados y deja `Meta (JSON)` como bloque avanzado (opcional); se autoaplica la plantilla al cambiar de subtipo.
 - Projects: creación idempotente desde Settings; botón Delete con doble confirmación; no se permite borrar el proyecto activo. Las tools ya no crean proyectos automáticamente (devuelven “Project not found”).
-- CLI: tools `cli_start`/`cli_send`/`cli_stop`/`cli_restart` para orquestar sesiones.
+- Python CLI: tools `python_cli_start` / `python_cli_send` / `python_cli_stop` / `python_cli_restart` para sesiones interactivas de Python (script o módulo). No ejecuta shell general.
 - Robustez BD: borrado de proyectos en dos fases (items → proyecto) con FKs activas; sin parches de desactivar FKs.
 - Docker: instala PyTorch estándar; si hay GPU disponible, se usará, si no, CPU.
 

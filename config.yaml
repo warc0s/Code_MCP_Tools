@@ -47,12 +47,12 @@ mcp:
     patch_doc: true
     delete_item: true
     chunks_by_url: true
-    cli_stop: true
+    python_cli_stop: true
     hybrid_search: true
-    cli_start: true
+    python_cli_start: true
     dense_search: false
     lexical_search: false
-    cli_send: true
-    cli_restart: true
+    python_cli_send: true
+    python_cli_restart: true
 ui:
   selected_project: proyect

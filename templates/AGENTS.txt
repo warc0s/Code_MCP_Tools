@@ -99,7 +99,7 @@
 ## Tools MCP rápidas
 Nota: algunas tools pueden estar desactivadas y no podrás usarlas.
 - rag: `hybrid_search` (busca denso+léxico con MMR/rerank), `chunks_by_url` (devuelve todos los chunks de una URL), `dense_search`/`lexical_search`.
-- cli: `cli_start` (lanza sesión interactiva), `cli_send` (envía input), `cli_stop` (SIGINT/SIGKILL), `cli_restart` (relanza con el comando original).
+- python_cli: `python_cli_start` (lanza sesión Python: script o módulo), `python_cli_send` (envía input), `python_cli_stop` (SIGINT/SIGTERM/SIGKILL), `python_cli_restart` (relanza con la configuración original). No ejecuta shell general.
 - items (proyectos): siempre pasa `project` o `project_id`.
   - `store_item` crea `memory/doc/bug/todo` (versión 1).
   - `get_item` recupera uno; `list_items` filtra por tipo/estado/tags; `search_items` busca en título/cuerpo/meta.

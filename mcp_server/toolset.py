@@ -9,6 +9,9 @@ from dataclasses import asdict
 from typing import Any, Dict, Iterable, List, Optional
 
 from utils.cli_sessions import restart_session, send_input, start_session, stop_session
+import re as _re
+import shlex as _shlex
+from pathlib import Path as _Path
 from utils.items import ItemService
 from utils.item_meta import meta_json_schema_oneof, typed_json_schema_oneof
 
@@ -190,31 +193,34 @@ class RAGToolset:
                 },
                 "output_schema": CHUNK_OUTPUT_SCHEMA,
             },
-            "cli_start": {
-                "title": "Start interactive CLI session",
-                "description": "Spawn an interactive CLI session (e.g., python app.py) and return initial output.",
+            "python_cli_start": {
+                "title": "Start Python CLI session",
+                "description": "Start an interactive Python session (script or module). Python-only; shell commands are rejected.",
                 "schema": {
                     "type": "object",
                     "properties": {
-                        "command": {"type": "string"},
+                        "mode": {"type": "string", "enum": ["script", "module"]},
+                        "script_path": {"type": "string"},
+                        "module_name": {"type": "string"},
+                        "args": {"type": "array", "items": {"type": "string"}},
+                        "python_opts": {
+                            "type": "object",
+                            "properties": {"unbuffered": {"type": "boolean"}},
+                        },
                         "conda_env": {"type": "string"},
                         "workdir": {"type": "string"},
-                        "batch_queries": {
-                            "type": "array",
-                            "items": {"type": "string"},
-                        },
-                        "prompt_pattern": {"type": "string"},
+                        "high_scrollback": {"type": "boolean"},
                         "timeout": {"type": "number", "minimum": 0},
-                        "env": {"type": "object"},
                         "max_bytes": {"type": "integer", "minimum": 1},
+                        "env": {"type": "object"},
                     },
-                    "required": ["command"],
+                    "required": ["mode"],
                 },
                 "output_schema": INTERACTIVE_OUTPUT_SCHEMA,
             },
-            "cli_send": {
-                "title": "Send input to CLI session",
-                "description": "Send input to an interactive CLI session and fetch the new output.",
+            "python_cli_send": {
+                "title": "Send input to Python session",
+                "description": "Send input to a Python CLI session and fetch new output.",
                 "schema": {
                     "type": "object",
                     "properties": {
@@ -227,9 +233,9 @@ class RAGToolset:
                 },
                 "output_schema": INTERACTIVE_OUTPUT_SCHEMA,
             },
-            "cli_stop": {
-                "title": "Stop CLI session",
-                "description": "Gracefully stop an interactive CLI session (SIGINT) and return final output.",
+            "python_cli_stop": {
+                "title": "Stop Python session",
+                "description": "Gracefully stop a Python CLI session (SIGINT/TERM) and return final output.",
                 "schema": {
                     "type": "object",
                     "properties": {
@@ -240,9 +246,9 @@ class RAGToolset:
                 },
                 "output_schema": INTERACTIVE_OUTPUT_SCHEMA,
             },
-            "cli_restart": {
-                "title": "Restart CLI session",
-                "description": "Restart a previous CLI session using the original command and return the new output.",
+            "python_cli_restart": {
+                "title": "Restart Python session",
+                "description": "Restart a previous Python session using the original configuration and return the new output.",
                 "schema": {
                     "type": "object",
                     "properties": {
@@ -461,6 +467,58 @@ class RAGToolset:
             if enum_values and value not in enum_values:
                 raise ValueError(f"'{key}' debe ser uno de: {', '.join(enum_values)}.")
 
+    def _build_python_command(self, payload: Dict[str, Any]) -> str:
+        """Build and validate a Python-only command string.
+
+        Supports two modes:
+        - Structured: mode=script|module with script_path/module_name and args
+        - Legacy: command string, but must start with 'python' and not use '-c'
+        """
+        repo_root = _Path.cwd().resolve()
+        mode = (payload.get("mode") or "").strip().lower()
+        args_list = payload.get("args") or []
+        if args_list and (not isinstance(args_list, list) or not all(isinstance(x, str) for x in args_list)):
+            raise ValueError("'args' debe ser una lista de cadenas.")
+        pyopts = payload.get("python_opts") or {}
+        unbuffered = bool(pyopts.get("unbuffered", True))
+        python_bin = "python"
+
+        def _quote_list(parts: list[str]) -> str:
+            return " ".join(_shlex.quote(p) for p in parts)
+
+        if mode == "script":
+            script_path = payload.get("script_path") or ""
+            if not isinstance(script_path, str) or not script_path.strip():
+                raise ValueError("Debes indicar 'script_path' para mode='script'.")
+            candidate = (repo_root / script_path).resolve()
+            # Denegar symlinks que escapan
+            if not candidate.is_file():
+                raise ValueError("Script no encontrado.")
+            if not str(candidate).startswith(str(repo_root) + "/"):
+                raise ValueError("Script fuera del repo.")
+            parts = [python_bin]
+            if unbuffered:
+                parts.append("-u")
+            parts.append(str(candidate))
+            parts.extend(args_list)
+            return _quote_list(parts)
+
+        if mode == "module":
+            mod = payload.get("module_name") or ""
+            if not isinstance(mod, str) or not mod.strip():
+                raise ValueError("Debes indicar 'module_name' para mode='module'.")
+            if not _re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", mod):
+                raise ValueError("module_name inválido.")
+            parts = [python_bin]
+            if unbuffered:
+                parts.append("-u")
+            parts.extend(["-m", mod])
+            parts.extend(args_list)
+            return _quote_list(parts)
+
+        # No legacy mode supported
+        raise ValueError("Debes indicar 'mode' y parámetros válidos para Python (script/module).")
+
     def call(self, name: str, payload: Dict[str, Any]) -> Any:
         if name not in self._tools:
             logger.warning("Solicitud para tool desconocida: %s", name)
@@ -481,31 +539,34 @@ class RAGToolset:
                 results = self.retriever.hybrid_search(payload["query"], top_k=payload.get("top_k"))
             elif name == "chunks_by_url":
                 results = self.retriever.chunks_for_url(payload["url"])
-            elif name == "cli_start":
+            elif name == "python_cli_start":
+                # Build a Python-only command from structured fields
+                command = self._build_python_command(payload)
+                high = bool(payload.get("high_scrollback", False))
+                ring_max = (2 * 1024 * 1024) if high else None
                 results = start_session(
-                    command=payload["command"],
+                    command=command,
                     conda_env=payload.get("conda_env"),
                     workdir=payload.get("workdir"),
-                    batch_queries=payload.get("batch_queries"),
-                    prompt_pattern=payload.get("prompt_pattern"),
                     env=payload.get("env"),
                     timeout=float(payload.get("timeout", 1.5)),
                     max_bytes=int(payload.get("max_bytes", 16000)),
                     log_enabled=self.cli_logs_enabled,
+                    ring_max_bytes=ring_max,
                 )
-            elif name == "cli_send":
+            elif name == "python_cli_send":
                 results = send_input(
                     session_id=payload["session_id"],
                     text=payload.get("text", ""),
                     timeout=float(payload.get("timeout", 1.5)),
                     max_bytes=int(payload.get("max_bytes", 16000)),
                 )
-            elif name == "cli_stop":
+            elif name == "python_cli_stop":
                 results = stop_session(
                     session_id=payload["session_id"],
                     kill=bool(payload.get("kill", False)),
                 )
-            elif name == "cli_restart":
+            elif name == "python_cli_restart":
                 results = restart_session(
                     session_id=payload["session_id"],
                     timeout=float(payload.get("timeout", 1.5)),

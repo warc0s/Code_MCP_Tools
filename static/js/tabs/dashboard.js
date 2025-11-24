@@ -78,7 +78,8 @@ export async function refreshDashboardStatus() {
     } else {
       grouped.forEach(({ group, names }) => {
         const block = document.createElement('div');
-        block.innerHTML = `<div style="font-size:11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing:0.05em; margin-bottom:6px;">${group}</div>`;
+        const nice = (group || '').replace(/_/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
+        block.innerHTML = `<div style="font-size:11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing:0.05em; margin-bottom:6px;">${nice}</div>`;
         const list = document.createElement('div');
         list.style.cssText = 'display:flex; flex-wrap: wrap; gap:6px;';
         names.forEach((n) => {

@@ -249,7 +249,8 @@ export async function refreshTools() {
     Object.entries(toolGroups).forEach(([group, names]) => {
       const card = document.createElement('div');
       card.style.cssText = 'padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);';
-      card.innerHTML = `<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 10px;">${group}</div>`;
+      const nice = (group || '').replace(/_/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
+      card.innerHTML = `<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 10px;">${nice}</div>`;
       names.forEach((name) => {
         const id = `tool-${group}-${name}`;
         const row = document.createElement('div');
