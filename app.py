@@ -30,6 +30,7 @@ from utils.items import ItemService
 from utils.pipeline import rebuild_rag_from_sitemap, rebuild_rag_from_urls
 from utils.retrieval import Retriever
 from utils.reranker import CLOUD_RERANKER_MODEL, PassageReranker
+from utils.cli_sessions import set_python_exec_map
 
 # Filtra el warning de Pydantic generado por crawl4ai (Config en BaseModel).
 warnings.filterwarnings(
@@ -831,6 +832,13 @@ def main() -> None:
         enabled_tools=enabled_tools,
         cli_logs_enabled=getattr(getattr(config, "mcp", None), "cli_logs_enabled", True),
     )
+    # Configure python executable mapping for conda envs if provided in config
+    try:
+        mapping = getattr(getattr(config, "mcp", None), "python_exec_map", {}) or {}
+        if isinstance(mapping, dict):
+            set_python_exec_map(mapping)
+    except Exception:
+        pass
     state = AppState(
         config=config,
         toolset=toolset,

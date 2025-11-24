@@ -9,6 +9,7 @@ from dataclasses import asdict
 from typing import Any, Dict, Iterable, List, Optional
 
 from utils.cli_sessions import restart_session, send_input, start_session, stop_session
+from utils.call_function import call_python_function
 import re as _re
 import shlex as _shlex
 from pathlib import Path as _Path
@@ -111,6 +112,12 @@ INTERACTIVE_OUTPUT_SCHEMA: Dict[str, Any] = {
         "next_step": {"type": "string"},
         "conda_env": {"type": "string"},
         "prompt_pattern": {"type": "string"},
+        "termination_reason": {"type": "string"},
+        "exit_code": {"type": ["integer", "null"]},
+        "signal": {"type": ["string", "null"]},
+        "ring_buffer_bytes": {"type": ["integer", "null"]},
+        "ring_buffer_truncated": {"type": ["boolean", "null"]},
+        "ring_buffer_discarded_bytes": {"type": ["integer", "null"]},
     },
     "required": ["session_id", "output", "awaiting_input", "alive", "log_path"],
 }
@@ -199,7 +206,7 @@ class RAGToolset:
                 "schema": {
                     "type": "object",
                     "properties": {
-                        "mode": {"type": "string", "enum": ["script", "module"]},
+                        "mode": {"type": "string", "enum": ["script", "module", "module_repl"]},
                         "script_path": {"type": "string"},
                         "module_name": {"type": "string"},
                         "args": {"type": "array", "items": {"type": "string"}},
@@ -213,6 +220,7 @@ class RAGToolset:
                         "timeout": {"type": "number", "minimum": 0},
                         "max_bytes": {"type": "integer", "minimum": 1},
                         "env": {"type": "object"},
+                        "stdin_lines": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": ["mode"],
                 },
@@ -226,10 +234,11 @@ class RAGToolset:
                     "properties": {
                         "session_id": {"type": "string"},
                         "text": {"type": "string"},
+                        "stdin_lines": {"type": "array", "items": {"type": "string"}},
                         "timeout": {"type": "number", "minimum": 0},
                         "max_bytes": {"type": "integer", "minimum": 1},
                     },
-                    "required": ["session_id", "text"],
+                    "required": ["session_id"],
                 },
                 "output_schema": INTERACTIVE_OUTPUT_SCHEMA,
             },
@@ -258,6 +267,37 @@ class RAGToolset:
                     "required": ["session_id"],
                 },
                 "output_schema": INTERACTIVE_OUTPUT_SCHEMA,
+            },
+            "python_call_function": {
+                "title": "Call Python function (non-interactive)",
+                "description": "Import and call a function from a module inside the repository and return JSON + logs.",
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "module": {"type": "string"},
+                        "function": {"type": "string"},
+                        "args": {"type": "array"},
+                        "kwargs": {"type": "object"},
+                        "conda_env": {"type": "string"},
+                        "workdir": {"type": "string"},
+                        "timeout_ms": {"type": "integer", "minimum": 1},
+                        "capture_stdout": {"type": "boolean"},
+                    },
+                    "required": ["module", "function"],
+                },
+                "output_schema": {
+                    "type": "object",
+                    "properties": {
+                        "ok": {"type": "boolean"},
+                        "result": {},
+                        "stdout": {"type": "string"},
+                        "stderr": {"type": "string"},
+                        "error_type": {"type": ["string", "null"]},
+                        "error_message": {"type": ["string", "null"]},
+                        "traceback": {"type": ["string", "null"]},
+                    },
+                    "required": ["ok"],
+                },
             },
             "store_item": {
                 "title": "Store project item",
@@ -470,9 +510,10 @@ class RAGToolset:
     def _build_python_command(self, payload: Dict[str, Any]) -> str:
         """Build and validate a Python-only command string.
 
-        Supports two modes:
-        - Structured: mode=script|module with script_path/module_name and args
-        - Legacy: command string, but must start with 'python' and not use '-c'
+        Supported modes:
+        - script: python [-u] <script_path> [args]
+        - module: python [-u] -m <module> [args]
+        - module_repl: python [-u] -i -m <module> [args]
         """
         repo_root = _Path.cwd().resolve()
         mode = (payload.get("mode") or "").strip().lower()
@@ -486,16 +527,28 @@ class RAGToolset:
         def _quote_list(parts: list[str]) -> str:
             return " ".join(_shlex.quote(p) for p in parts)
 
+        # Resolve workdir relative to repo_root
+        workdir_arg = payload.get("workdir") or "."
+        workdir_abs = (repo_root / workdir_arg).resolve()
+        if not str(workdir_abs).startswith(str(repo_root)):
+            raise ValueError(
+                f"Workdir fuera del repo. repo_root={repo_root} workdir_arg={workdir_arg} resolved={workdir_abs}"
+            )
+
         if mode == "script":
             script_path = payload.get("script_path") or ""
             if not isinstance(script_path, str) or not script_path.strip():
                 raise ValueError("Debes indicar 'script_path' para mode='script'.")
-            candidate = (repo_root / script_path).resolve()
+            candidate = (workdir_abs / script_path).resolve()
             # Denegar symlinks que escapan
+            if not str(candidate).startswith(str(repo_root)):
+                raise ValueError(
+                    f"Script fuera del repo. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
+                )
             if not candidate.is_file():
-                raise ValueError("Script no encontrado.")
-            if not str(candidate).startswith(str(repo_root) + "/"):
-                raise ValueError("Script fuera del repo.")
+                raise ValueError(
+                    f"Script no encontrado. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
+                )
             parts = [python_bin]
             if unbuffered:
                 parts.append("-u")
@@ -503,21 +556,27 @@ class RAGToolset:
             parts.extend(args_list)
             return _quote_list(parts)
 
-        if mode == "module":
+        if mode in ("module", "module_repl"):
             mod = payload.get("module_name") or ""
             if not isinstance(mod, str) or not mod.strip():
-                raise ValueError("Debes indicar 'module_name' para mode='module'.")
+                raise ValueError(
+                    "Debes indicar 'module_name' para mode='module' o 'module_repl'."
+                )
             if not _re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", mod):
                 raise ValueError("module_name inválido.")
             parts = [python_bin]
             if unbuffered:
                 parts.append("-u")
+            if mode == "module_repl":
+                parts.append("-i")
             parts.extend(["-m", mod])
             parts.extend(args_list)
             return _quote_list(parts)
 
-        # No legacy mode supported
-        raise ValueError("Debes indicar 'mode' y parámetros válidos para Python (script/module).")
+        # Unsupported mode
+        raise ValueError(
+            "Debes indicar 'mode' válido ('script', 'module' o 'module_repl') para Python."
+        )
 
     def call(self, name: str, payload: Dict[str, Any]) -> Any:
         if name not in self._tools:
@@ -553,14 +612,28 @@ class RAGToolset:
                     max_bytes=int(payload.get("max_bytes", 16000)),
                     log_enabled=self.cli_logs_enabled,
                     ring_max_bytes=ring_max,
+                    stdin_lines=payload.get("stdin_lines"),
                 )
             elif name == "python_cli_send":
-                results = send_input(
-                    session_id=payload["session_id"],
-                    text=payload.get("text", ""),
-                    timeout=float(payload.get("timeout", 1.5)),
-                    max_bytes=int(payload.get("max_bytes", 16000)),
-                )
+                # Prefer stdin_lines when provided; otherwise fall back to single text
+                stdin_lines = payload.get("stdin_lines")
+                if isinstance(stdin_lines, list) and stdin_lines:
+                    # Send multiple lines and then drain once
+                    from utils.cli_sessions import send_lines as _send_lines
+
+                    results = _send_lines(
+                        session_id=payload["session_id"],
+                        lines=[str(x) for x in stdin_lines],
+                        timeout=float(payload.get("timeout", 1.5)),
+                        max_bytes=int(payload.get("max_bytes", 16000)),
+                    )
+                else:
+                    results = send_input(
+                        session_id=payload["session_id"],
+                        text=payload.get("text", ""),
+                        timeout=float(payload.get("timeout", 1.5)),
+                        max_bytes=int(payload.get("max_bytes", 16000)),
+                    )
             elif name == "python_cli_stop":
                 results = stop_session(
                     session_id=payload["session_id"],
@@ -570,6 +643,17 @@ class RAGToolset:
                 results = restart_session(
                     session_id=payload["session_id"],
                     timeout=float(payload.get("timeout", 1.5)),
+                )
+            elif name == "python_call_function":
+                results = call_python_function(
+                    module=payload["module"],
+                    function=payload["function"],
+                    args=payload.get("args"),
+                    kwargs=payload.get("kwargs"),
+                    conda_env=payload.get("conda_env"),
+                    workdir=payload.get("workdir"),
+                    timeout_ms=int(payload.get("timeout_ms", 5000)),
+                    capture_stdout=bool(payload.get("capture_stdout", True)),
                 )
             elif name == "store_item":
                 item = self.item_service.store_item(

@@ -108,6 +108,8 @@ class MCPConfig:
     tool_sets: Dict[str, Dict[str, bool]] = field(default_factory=dict)
     active_set: Optional[str] = None
     cli_logs_enabled: bool = True
+    # Optional mapping to resolve python executables per conda env
+    python_exec_map: Dict[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
