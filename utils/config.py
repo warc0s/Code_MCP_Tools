@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -56,7 +56,16 @@ class CrawlingConfig:
     workers: int = 8
     pattern: str = "*"
     max_urls: int = -1
-    cache_mode: str = "enabled"
+    cache_mode: str = "disabled"
+    # Crawl4AI browser/run tuning
+    text_mode: bool = False
+    enable_stealth: bool = False
+    user_agent: Optional[str] = None
+    word_count_threshold: int = 5
+    excluded_tags: List[str] = field(default_factory=lambda: ["nav", "footer", "aside", "form"])
+    pruning_threshold: float = 0.2
+    pruning_min_word_threshold: int = 5
+    min_markdown_chars: int = 120
 
 
 @dataclass(frozen=True)
@@ -75,6 +84,8 @@ class EmbeddingConfig:
     query_prompt_name: Optional[str] = "query"
     embedding_dim: Optional[int] = None
     cloud_model_name: Optional[str] = None
+    # Tamaño de lote para generación de embeddings (solo lectura en pipeline)
+    batch_size: int = 64
 
 
 @dataclass(frozen=True)

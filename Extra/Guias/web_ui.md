@@ -39,6 +39,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - Durante una reconstrucción (ingesta) el header muestra un pill `Rebuilding...` y el estado se refresca automáticamente cada 2s solo mientras dura la ingesta. Al terminar se detiene el auto‑refresh y se muestra un toast de finalización.
   - También puedes pulsar “Refresh” manual cuando lo necesites.
   - El backend puede usar GPU automáticamente para generar embeddings si Torch detecta CUDA.
+  - Los botones de ingesta (`Index from Sitemap` y `Index from File`) muestran estado de carga (spinner) sobre el propio botón durante la operación.
 - El recuento de documentos y las URLs listadas en Dashboard/RAG se leen directamente de la BD; si cambias de índice (rebuild) o cierras la conexión, los datos se actualizarán en el siguiente Refresh.
 - El header muestra `Restart pending` cuando hay cambios guardados en `config.yaml` que requieren reinicio.
 - En modo Docker, el botón **Restart MCP** ejecuta `docker restart <CONTAINER_NAME>` (por defecto `code-mcp-tools` en `docker-compose.yml`). También puedes reiniciar el contenedor a mano y consultar logs con `docker logs -f code-mcp-tools`.

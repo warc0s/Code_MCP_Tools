@@ -37,11 +37,13 @@ export function isValidUrl(string) {
 
 export function setButtonLoading(button, loading = true) {
   if (!button) return;
+  // Be resilient to non-button targets (e.g., SVG/span inside the button)
+  const btn = button.closest ? (button.closest('button') || button) : button;
   if (loading) {
-    button.classList.add('btn-loading');
-    button.disabled = true;
+    btn.classList.add('btn-loading');
+    try { btn.disabled = true; } catch (_) { /* ignore */ }
   } else {
-    button.classList.remove('btn-loading');
-    button.disabled = false;
+    btn.classList.remove('btn-loading');
+    try { btn.disabled = false; } catch (_) { /* ignore */ }
   }
 }

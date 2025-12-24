@@ -115,6 +115,8 @@ def _rebuild_rag_from_crawled_documents(
 
     manager.insert_documents(doc_rows)
     manager.insert_chunks(chunk_rows)
+    # Crear índices pesados tras la carga para evitar mantenimiento incremental por fila
+    manager.create_indexes()
 
     reranker_model = (
         config.reranker.model_name

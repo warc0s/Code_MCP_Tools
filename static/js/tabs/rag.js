@@ -115,12 +115,22 @@ export function setStatusAutoRefresh(enable) {
   }
 }
 
-export async function rebuildSitemap(event) {
+function _resolveButton(elOrEvent) {
+  if (!elOrEvent) return undefined;
+  // If a DOM element was passed (e.g., inline onclick using `this`)
+  if (elOrEvent.tagName) return elOrEvent.closest('button') || elOrEvent;
+  // If an Event was passed
+  const t = elOrEvent.target;
+  if (t && t.closest) return t.closest('button') || t;
+  return undefined;
+}
+
+export async function rebuildSitemap(elOrEvent) {
   const urlInput = document.getElementById('sitemap-url');
   const url = urlInput?.value?.trim() || '';
   if (!url) { showToast('You must specify a sitemap URL', 'error'); log('You must specify a sitemap'); return; }
   if (!isValidUrl(url)) { showToast('Invalid URL format', 'error'); log('Invalid URL format'); return; }
-  const btn = event?.target;
+  const btn = _resolveButton(elOrEvent);
   setButtonLoading(btn, true);
   showToast('Indexing started. Status will update every 2s…', 'success');
   setStatusAutoRefresh(true);
@@ -140,11 +150,11 @@ export async function rebuildSitemap(event) {
   }
 }
 
-export async function rebuildFile(event) {
+export async function rebuildFile(elOrEvent) {
   const select = document.getElementById('file-select-ingesta') || document.getElementById('file-select');
   const file = select?.value || '';
   if (!file) { showToast('Please select a file', 'error'); log('Select a file'); return; }
-  const btn = event?.target;
+  const btn = _resolveButton(elOrEvent);
   setButtonLoading(btn, true);
   showToast('Indexing started. Status will update every 2s…', 'success');
   setStatusAutoRefresh(true);

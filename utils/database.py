@@ -146,9 +146,18 @@ class DuckDBManager:
             );
             """
         )
-        # 'items' ahora vive en la base SQLite de memoria; no crear índices aquí
+        # Índices ligeros sobre columnas pequeñas
         conn.execute("CREATE INDEX IF NOT EXISTS idx_docs_url ON docs(url);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);")
+        # Nota de rendimiento: índices costosos (HNSW y FTS) se difieren hasta después de la carga masiva
+        # usando create_indexes(); así evitamos mantenimiento incremental por fila.
+
+    def create_indexes(self) -> None:
+        """Crea los índices pesados (HNSW y FTS) tras insertar datos.
+
+        Es idempotente y segura ante entornos sin extensiones.
+        """
+        conn = self.connection
         try:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw(embedding) WITH (metric='cosine');"

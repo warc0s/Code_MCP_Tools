@@ -21,6 +21,14 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - La CLI muestra el modo y los modelos activos en cada iteración. Al iniciar el servidor se imprime un aviso si la BD DuckDB fue creada en otro modo, indicando los modelos almacenados vs. configurados y la dimensión registrada; puedes abortar o continuar bajo tu responsabilidad.
 - Durante la ingesta se guardan en la tabla `metadata` los campos `runtime_mode`, `embedding_model_name`, `embedding_dim` y `reranker_model_name` para futuras verificaciones.
 
+### Rendimiento y cuellos de botella típicos
+- Embeddings locales (por defecto `Qwen/Qwen3-Embedding-0.6B`) en CPU pueden ser el mayor coste. Si no dispones de GPU, considera:
+  - Aumentar `embeddings.batch_size` si hay memoria suficiente (p. ej., 128 en CPU, 256–512 en GPU).
+  - Cambiar a `main.mode: cloud` para usar `text-embedding-3-small` (requiere `OPENAI_API_KEY`).
+  - Usar un modelo local más ligero (p. ej., `sentence-transformers/all-MiniLM-L6-v2`, dim=384) si el dominio es EN y no necesitas multilingüe.
+- Índices: HNSW/FTS se crean tras la inserción (no antes) para acelerar la carga.
+- Crawler: ajusta `crawling.workers` (por defecto 8) y deja `cache_mode: enabled` para reutilizar descargas.
+
 ## Flujo de ingesta
 1. CLI opción 1.1 pide un sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.
 2. CLI opción 1.2 lista los ficheros `.txt` en la carpeta `txt/` (una URL por línea, se ignoran líneas vacías o que empiecen por `#`) y ejecuta `utils.pipeline.rebuild_rag_from_urls` con el fichero seleccionado.
@@ -28,6 +36,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 4. Chunking conserva jerarquía y bloques de código, con solapado configurable.
 5. Se embebe con el modelo definido por el modo (`Qwen/Qwen3-Embedding-0.6B` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en DuckDB (`FLOAT[dim]`).
 6. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
+   - Rendimiento: la creación de índices HNSW/FTS se difiere hasta después de la inserción masiva de `docs/chunks` para evitar mantenimiento incremental por fila. Esto reduce sensiblemente el tiempo total de rebuild a corpus medio/grande.
 
 ## Retrievers / Tools
 - `dense_search`: solo vectorial (cosine).
@@ -121,6 +130,7 @@ Consulta también Dashboard → Integrations para snippets con tu MCP URL actual
 - Se fuerza `DUCKDB_EXTENSION_DIRECTORY` a `.duckdb/extensions` para guardar FTS/VSS sin permisos root.
 - Si faltan extensiones, DuckDB pedirá descargar una vez con red.
 - Reranker activado por defecto (`enable_rerank: true`) usando Qwen `0.6B` en local o `8B` vía DeepInfra en cloud; desactívalo con `retrieval.enable_rerank`.
+  - El reranker no participa en la ingesta; sólo en búsqueda. No impacta el rebuild salvo por la carga inicial del modelo si ya está activo en el servidor.
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
 - GPU si está disponible: el proveedor de embeddings detecta CUDA y usa GPU de forma automática; si no, CPU. Asegúrate de instalar versiones emparejadas de Torch/TorchVision (por ejemplo, `torch==2.4.1` y `torchvision==0.19.1`).
 - Si aparece `ImportError: libnccl.so.*`, tu instalación de Torch requiere NCCL/CUDA. Opciones: instalar dependencias CUDA/NCCL del sistema, instalar la variante CPU de Torch o usar modo cloud para embedding.
@@ -128,6 +138,17 @@ Consulta también Dashboard → Integrations para snippets con tu MCP URL actual
 - Todos los modelos de HuggingFace (embeddings y reranker) se cachean en `.cache/models` dentro del proyecto; puedes borrar esa carpeta para forzar una descarga limpia.
 - `requirements.txt` incluye CPU libs, `fastapi`, `uvicorn`, `pexpect` y los clientes remotos (`torch` CPU, `sentence-transformers`, `openai`, `requests`, etc.).
 - El servidor MCP abre la base de datos en modo **solo lectura**, así que puedes lanzar scripts o consultas que necesiten leer `data/rag.duckdb` en paralelo (usa `duckdb.connect(path, read_only=True)`). La fase de `INSTALL` de extensiones se hace automáticamente con una conexión temporal de escritura antes de arrancar el servidor, por lo que no hace falta detenerlo para consultas auxiliares.
+
+## Crawling: preset compatible (recomendado)
+
+Para webs que bloquean headless o sirven HTML “vacío” (cookie walls, 403/robot checks), usa un preset más tolerante en `config.yaml`:
+- `crawling.text_mode: false` (render completo)
+- `crawling.enable_stealth: true` (si tu instalación lo soporta; si no, el crawler reintenta sin stealth)
+- `crawling.cache_mode: disabled` (evita cachear páginas bloqueadas)
+- `crawling.pruning_threshold: 0.2` y `crawling.pruning_min_word_threshold: 5` (menos poda)
+- `crawling.min_markdown_chars: 120` (descarta páginas demasiado pequeñas)
+
+Durante la ingesta se imprime un resumen de fallos por razón (p. ej. `blocked_or_empty`, `too_short_markdown`, `crawl_failed`) para poder iterar la configuración.
 
 ## Logging y depuración
 - `mcp_server.server` inicializa FastAPI/uvicorn con `LOG_LEVEL` (INFO por defecto) y loguea cada tool invocada; el servidor serializa respuestas y schemas MCP.
