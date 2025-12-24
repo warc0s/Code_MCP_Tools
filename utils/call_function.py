@@ -1,11 +1,27 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional
 
 from utils.cli_sessions import _resolve_python_executable
+
+_ALLOWED_MODULE_PREFIXES = ("utils", "utils.", "scripts", "scripts.")
+_MODULE_RE = re.compile(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*")
+_FUNCTION_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _is_under_root(candidate: Path, root: Path) -> bool:
+    try:
+        return candidate.is_relative_to(root)
+    except AttributeError:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            return False
 
 
 def call_python_function(
@@ -23,12 +39,32 @@ def call_python_function(
     Spawns the configured Python (optionally via conda env) to run utils.function_runner
     with a JSON payload via stdin. Enforces a hard timeout.
     """
+    module_name = (module or "").strip()
+    function_name = (function or "").strip()
+    if not module_name or not _MODULE_RE.fullmatch(module_name):
+        raise ValueError("Invalid module name.")
+    if not function_name or not _FUNCTION_RE.fullmatch(function_name):
+        raise ValueError("Invalid function name.")
+    if function_name.startswith("__"):
+        raise ValueError("Dunder functions are not allowed.")
+    if not module_name.startswith(_ALLOWED_MODULE_PREFIXES):
+        raise ValueError("Module not allowed. Allowed prefixes: utils.*, scripts.*")
+
+    repo_root = Path.cwd().resolve()
+    workdir_arg = (workdir or ".").strip()
+    if not workdir_arg:
+        workdir_arg = "."
+    candidate = Path(workdir_arg)
+    workdir_abs = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
+    if not _is_under_root(workdir_abs, repo_root):
+        raise ValueError("workdir outside repository.")
+
     payload = {
-        "module": module,
-        "function": function,
+        "module": module_name,
+        "function": function_name,
         "args": args or [],
         "kwargs": kwargs or {},
-        "workdir": str(workdir or Path.cwd()),
+        "workdir": str(workdir_abs),
         "capture_stdout": bool(capture_stdout),
     }
     pyexec = _resolve_python_executable(conda_env)
@@ -45,7 +81,7 @@ def call_python_function(
             input=json.dumps(payload),
             text=True,
             capture_output=True,
-            cwd=workdir or None,
+            cwd=workdir_abs.as_posix(),
             timeout=max(0.1, float(timeout_ms) / 1000.0),
             check=False,
         )
@@ -81,4 +117,3 @@ def call_python_function(
 
 
 __all__ = ["call_python_function"]
-

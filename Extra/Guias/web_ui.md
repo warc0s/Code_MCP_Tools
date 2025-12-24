@@ -5,7 +5,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 ## Arranque
 - Ejecuta `python app.py`.
 - Variables opcionales:
-  - `APP_HOST` (por defecto `0.0.0.0`; el log sugiere abrir en `http://localhost:8000`)
+  - `APP_HOST` (por defecto `127.0.0.1`; en Docker suele usarse `0.0.0.0` para exponer el puerto)
   - `APP_PORT` (por defecto `8000`)
   - `MCP_HTTP_PATH` (por defecto `/mcp`)
 - El panel vive en la raíz (`http://HOST:PORT/`) y el endpoint MCP en `http://HOST:PORT<MCP_HTTP_PATH>`.
@@ -44,6 +44,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - El header muestra `Restart pending` cuando hay cambios guardados en `config.yaml` que requieren reinicio.
 - En modo Docker, el botón **Restart MCP** ejecuta `docker restart <CONTAINER_NAME>` (por defecto `code-mcp-tools` en `docker-compose.yml`). También puedes reiniciar el contenedor a mano y consultar logs con `docker logs -f code-mcp-tools`.
   - Debes establecer `CONTAINER_NAME` (ya incluido en `docker-compose.yml`) para que el botón funcione; no hay fallback a relanzar subprocesos fuera de Docker.
+  - Timeout configurable con `DOCKER_RESTART_TIMEOUT_SEC` (por defecto 30s).
 
 ## Modularización reciente
 - HTML dividido: `templates/index.html` extiende `templates/base.html` e incluye pestañas en `templates/partials/`.

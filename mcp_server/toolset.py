@@ -18,6 +18,22 @@ from utils.item_meta import meta_json_schema_oneof, typed_json_schema_oneof
 
 logger = logging.getLogger(__name__)
 
+_PYTHON_CALL_ALLOWED_PREFIXES = ("utils", "utils.", "scripts", "scripts.")
+_PYTHON_CALL_MODULE_RE = _re.compile(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*")
+_PYTHON_CALL_FUNCTION_RE = _re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+
+
+def _is_under_root(candidate: _Path, root: _Path) -> bool:
+    try:
+        return candidate.is_relative_to(root)
+    except AttributeError:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+
 SEARCH_RESULT_ITEM_SCHEMA: Dict[str, Any] = {
     "type": "object",
     "properties": {
@@ -530,7 +546,7 @@ class RAGToolset:
         # Resolve workdir relative to repo_root
         workdir_arg = payload.get("workdir") or "."
         workdir_abs = (repo_root / workdir_arg).resolve()
-        if not str(workdir_abs).startswith(str(repo_root)):
+        if not _is_under_root(workdir_abs, repo_root):
             raise ValueError(
                 f"Workdir fuera del repo. repo_root={repo_root} workdir_arg={workdir_arg} resolved={workdir_abs}"
             )
@@ -541,7 +557,7 @@ class RAGToolset:
                 raise ValueError("Debes indicar 'script_path' para mode='script'.")
             candidate = (workdir_abs / script_path).resolve()
             # Denegar symlinks que escapan
-            if not str(candidate).startswith(str(repo_root)):
+            if not _is_under_root(candidate, repo_root):
                 raise ValueError(
                     f"Script fuera del repo. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
                 )
@@ -645,13 +661,34 @@ class RAGToolset:
                     timeout=float(payload.get("timeout", 1.5)),
                 )
             elif name == "python_call_function":
+                module_name = str(payload.get("module") or "").strip()
+                func_name = str(payload.get("function") or "").strip()
+                if not module_name or not _PYTHON_CALL_MODULE_RE.fullmatch(module_name):
+                    raise ValueError("Invalid module name for python_call_function.")
+                if not func_name or not _PYTHON_CALL_FUNCTION_RE.fullmatch(func_name):
+                    raise ValueError("Invalid function name for python_call_function.")
+                if func_name.startswith("__"):
+                    raise ValueError("Dunder functions are not allowed.")
+                if not module_name.startswith(_PYTHON_CALL_ALLOWED_PREFIXES):
+                    raise ValueError(
+                        "Module not allowed. Allowed prefixes: utils.*, scripts.*"
+                    )
+                workdir_arg = payload.get("workdir") or "."
+                if not isinstance(workdir_arg, str):
+                    raise ValueError("Invalid workdir.")
+                if _Path(workdir_arg).is_absolute():
+                    raise ValueError("workdir must be a repo-relative path.")
+                repo_root = _Path.cwd().resolve()
+                workdir_abs = (repo_root / workdir_arg).resolve()
+                if not _is_under_root(workdir_abs, repo_root):
+                    raise ValueError("workdir outside repository.")
                 results = call_python_function(
-                    module=payload["module"],
-                    function=payload["function"],
+                    module=module_name,
+                    function=func_name,
                     args=payload.get("args"),
                     kwargs=payload.get("kwargs"),
                     conda_env=payload.get("conda_env"),
-                    workdir=payload.get("workdir"),
+                    workdir=str(workdir_abs),
                     timeout_ms=int(payload.get("timeout_ms", 5000)),
                     capture_stdout=bool(payload.get("capture_stdout", True)),
                 )

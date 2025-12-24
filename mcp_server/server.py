@@ -9,7 +9,7 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, AsyncIterator, Callable, Dict, Iterable, Optional
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from pydantic import BaseModel, Field
@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 JSON_RPC_VERSION = "2.0"
 PROTOCOL_VERSION = "2025-06-18"
 DEFAULT_HTTP_PATH = "/mcp"
+Lifespan = Callable[[FastAPI], AsyncIterator[None]]
 
 
 class ToolCall(BaseModel):
@@ -49,8 +50,12 @@ def _normalize_base_path(path: str) -> str:
     return cleaned
 
 
-def build_app(toolset: RAGToolset, base_path: str = DEFAULT_HTTP_PATH) -> FastAPI:
-    app = FastAPI(title="Code_MCP", version="0.1.0")
+def build_app(
+    toolset: RAGToolset,
+    base_path: str = DEFAULT_HTTP_PATH,
+    lifespan: Optional[Lifespan] = None,
+) -> FastAPI:
+    app = FastAPI(title="Code_MCP", version="0.1.0", lifespan=lifespan)
     base = _normalize_base_path(base_path)
     root_path = base if base != "/" else "/"
 
@@ -66,11 +71,11 @@ def build_app(toolset: RAGToolset, base_path: str = DEFAULT_HTTP_PATH) -> FastAP
         return payload
 
     @app.get(f"{base}/health")
-    def healthcheck():
+    async def healthcheck():
         return {"status": "ok"}
 
     @app.get(f"{base}/tools")
-    def list_tools():
+    async def list_tools():
         tools: list[Dict[str, object]] = []
         for name, spec in toolset.list_tools().items():
             tools.append(
@@ -84,7 +89,7 @@ def build_app(toolset: RAGToolset, base_path: str = DEFAULT_HTTP_PATH) -> FastAP
         return {"tools": tools}
 
     @app.post(f"{base}/call")
-    def call_tool(payload: ToolCall):
+    async def call_tool(payload: ToolCall):
         logger.info("HTTP /call tool=%s", payload.tool)
         try:
             results = toolset.call(payload.tool, payload.arguments or {})

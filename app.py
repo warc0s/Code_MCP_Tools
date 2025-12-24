@@ -9,6 +9,8 @@ import sys
 import threading
 import time
 import warnings
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import asynccontextmanager
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
@@ -89,8 +91,8 @@ def _install_extensions(db_path: Path) -> None:
 
 
 def _open_ro_connection(db_path: Path):
-    # Use read_write everywhere to avoid DuckDB config mismatch across connections
-    connection = duckdb.connect(db_path.as_posix(), read_only=False)
+    # Open read-only connection for serving queries (writes happen during rebuild via DuckDBManager).
+    connection = duckdb.connect(db_path.as_posix(), read_only=True)
     for extension in ("vss", "fts"):
         try:
             connection.execute(f"LOAD {extension};")
@@ -104,7 +106,7 @@ def _open_ro_connection(db_path: Path):
 
 
 def _rag_schema_available(db_path: Path) -> bool:
-    connection = duckdb.connect(db_path.as_posix(), read_only=False)
+    connection = duckdb.connect(db_path.as_posix(), read_only=True)
     try:
         rows = connection.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_name IN ('docs', 'chunks');"
@@ -125,7 +127,7 @@ def load_retriever(config: AppConfig) -> Tuple[Optional[Retriever], Optional[Any
 
     rag_ready = _rag_schema_available(db_path)
     if not rag_ready:
-        connection = duckdb.connect(db_path.as_posix(), read_only=False)
+        connection = duckdb.connect(db_path.as_posix(), read_only=True)
         logger.info("BD presente pero sin esquema RAG; se cargarán solo tablas generales.")
         return None, connection
 
@@ -186,6 +188,7 @@ class AppState:
     connection: Optional[Any]
     item_service: Optional[ItemService] = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
+    executor: ThreadPoolExecutor = field(default_factory=lambda: ThreadPoolExecutor(max_workers=4), repr=False)
     rebuild_running: bool = False
     rebuild_progress: Dict[str, Any] = field(default_factory=dict)
     rebuild_progress_seq: int = 0
@@ -235,12 +238,17 @@ class AppState:
         self.toolset.update_retriever(None)
 
 
-def _get_db_overview(connection) -> Dict[str, Any]:
+def _get_db_overview(db_path: Path) -> Dict[str, Any]:
     overview = {
         "docs_count": 0,
         "sample_urls": [],
     }
-    if not connection:
+    if not db_path or not Path(db_path).exists():
+        return overview
+    try:
+        connection = duckdb.connect(Path(db_path).as_posix(), read_only=True)
+    except Exception:
+        logger.info("No se pudo abrir la BD para overview.")
         return overview
     try:
         row = connection.execute("SELECT COUNT(*) FROM docs;").fetchone()
@@ -251,6 +259,11 @@ def _get_db_overview(connection) -> Dict[str, Any]:
         overview["sample_urls"] = [r[0] for r in rows if r and r[0]]
     except Exception:
         logger.info("No se pudo obtener el resumen de la BD.")
+    finally:
+        try:
+            connection.close()
+        except Exception:
+            pass
     return overview
 
 
@@ -272,7 +285,10 @@ def _is_docker() -> bool:
 def _resolve_host_binding() -> Tuple[str, str]:
     """Return the bind host and the host to display in logs."""
     host_env = (os.getenv("APP_HOST") or "").strip()
-    host = host_env or "0.0.0.0"
+    if host_env:
+        host = host_env
+    else:
+        host = "0.0.0.0" if _is_docker() else "127.0.0.1"
     display_host = "localhost" if host == "0.0.0.0" else host
     return host, display_host
 
@@ -291,10 +307,15 @@ def _normalize_slug(value: str) -> str:
 
 
 async def refresh_retriever(state: AppState) -> None:
-    retriever, connection = await asyncio.to_thread(load_retriever, state.config)
+    retriever, connection = load_retriever(state.config)
     state.connection = connection
     state.retriever = retriever
     state.toolset.update_retriever(retriever)
+
+
+async def _run_in_executor(state: AppState, func, *args):
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(state.executor, func, *args)
 
 
 def _load_config_dict(path: Path) -> Dict[str, Any]:
@@ -444,9 +465,9 @@ def _run_rebuild_sitemap(url: str, state: AppState):
 
 
 def _run_rebuild_urls_file(filename: str, state: AppState):
-    path = Path("txt") / filename
+    path = _resolve_txt_url_file(filename)
     if not path.is_file():
-        raise FileNotFoundError(f"No se encontró el fichero {path}")
+        raise FileNotFoundError(f"URL file not found: {path.name}")
     content = path.read_text(encoding="utf-8")
     urls: list[str] = []
     for line in content.splitlines():
@@ -465,8 +486,45 @@ def _run_rebuild_urls_file(filename: str, state: AppState):
     return rebuild_rag_from_urls(urls, state.config, embedder, progress_cb=_cb)
 
 
+def _is_relative_to(candidate: Path, root: Path) -> bool:
+    try:
+        return candidate.is_relative_to(root)
+    except AttributeError:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+
+def _resolve_txt_url_file(filename: str) -> Path:
+    name = (filename or "").strip()
+    if not name:
+        raise ValueError("Missing filename.")
+    if "/" in name or "\\" in name:
+        raise ValueError("Invalid filename.")
+    if not name.endswith(".txt"):
+        raise ValueError("Invalid filename; expected a .txt file.")
+
+    txt_dir = Path("txt").resolve()
+    candidate = (txt_dir / name).resolve()
+    if not _is_relative_to(candidate, txt_dir):
+        raise ValueError("Invalid filename.")
+    return candidate
+
+
 def create_web_app(state: AppState, base_path: str) -> FastAPI:
-    app = build_app(state.toolset, base_path=base_path)
+    @asynccontextmanager
+    async def _lifespan(_app: FastAPI):
+        try:
+            yield
+        finally:
+            try:
+                state.executor.shutdown(wait=True, cancel_futures=True)
+            except Exception:
+                pass
+
+    app = build_app(state.toolset, base_path=base_path, lifespan=_lifespan)
     templates = Jinja2Templates(directory="templates")
     app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -494,7 +552,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
 
     @app.get("/ui/api/status")
     async def api_status(request: Request):
-        overview = await asyncio.to_thread(_get_db_overview, state.connection)
+        overview = await _run_in_executor(state, _get_db_overview, state.config.database.path)
         models = resolve_model_names(state.config)
         # Build full MCP URL (scheme + host:port + path)
         base_url = str(request.base_url).rstrip("/")
@@ -638,7 +696,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             state.reset_rebuild_progress()
             try:
                 state.close_connection()
-                summary = await asyncio.to_thread(_run_rebuild_sitemap, url, state)
+                summary = await _run_in_executor(state, _run_rebuild_sitemap, url, state)
                 await refresh_retriever(state)
                 state.config_dirty = False
                 state.update_rebuild_progress({"stage": "done", "message": "Rebuild completed"})
@@ -654,6 +712,12 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
         filename = (payload.get("filename") or "").strip()
         if not filename:
             raise HTTPException(status_code=400, detail="Debes indicar un fichero de URLs.")
+        try:
+            resolved = _resolve_txt_url_file(filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        if not resolved.is_file():
+            raise HTTPException(status_code=404, detail="URL file not found.")
         async with state.lock:
             if state.rebuild_running:
                 raise HTTPException(status_code=409, detail="A rebuild is already in progress.")
@@ -661,7 +725,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             state.reset_rebuild_progress()
             try:
                 state.close_connection()
-                summary = await asyncio.to_thread(_run_rebuild_urls_file, filename, state)
+                summary = await _run_in_executor(state, _run_rebuild_urls_file, filename, state)
                 await refresh_retriever(state)
                 state.config_dirty = False
                 state.update_rebuild_progress({"stage": "done", "message": "Rebuild completed"})
@@ -883,18 +947,41 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
                 status_code=400,
                 detail="CONTAINER_NAME no está definido; reinicio disponible solo en entorno Docker.",
             )
+        timeout_sec_raw = (os.getenv("DOCKER_RESTART_TIMEOUT_SEC") or "").strip()
+        try:
+            timeout_sec = float(timeout_sec_raw) if timeout_sec_raw else 30.0
+        except ValueError:
+            timeout_sec = 30.0
         try:
             result = subprocess.run(
                 ["docker", "restart", container_name],
                 capture_output=True,
                 text=True,
                 check=True,
+                timeout=timeout_sec,
             )
             logger.info("Docker restart output: %s", result.stdout.strip())
             return {"status": "restarting", "message": f"Docker container {container_name} restarting"}
+        except subprocess.TimeoutExpired as exc:
+            stdout = (exc.stdout or "").strip()
+            stderr = (exc.stderr or "").strip()
+            detail = f"Docker restart timed out after {timeout_sec:.1f}s for container '{container_name}'."
+            if stderr:
+                detail += f" stderr: {stderr[:500]}"
+            elif stdout:
+                detail += f" stdout: {stdout[:500]}"
+            logger.error("Docker restart timed out for %s", container_name)
+            raise HTTPException(status_code=504, detail=detail) from exc
         except subprocess.CalledProcessError as exc:
-            logger.error("No se pudo reiniciar el contenedor %s: %s", container_name, exc.stderr)
-            raise HTTPException(status_code=500, detail=f"No se pudo reiniciar el contenedor {container_name}.")
+            stderr = (exc.stderr or "").strip()
+            stdout = (exc.stdout or "").strip()
+            detail = f"Failed to restart docker container '{container_name}'."
+            if stderr:
+                detail += f" stderr: {stderr[:500]}"
+            elif stdout:
+                detail += f" stdout: {stdout[:500]}"
+            logger.error("No se pudo reiniciar el contenedor %s: %s", container_name, stderr or stdout)
+            raise HTTPException(status_code=500, detail=detail) from exc
 
     return app
 

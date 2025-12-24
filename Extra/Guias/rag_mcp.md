@@ -33,7 +33,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 1. CLI opción 1.1 pide un sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.
 2. CLI opción 1.2 lista los ficheros `.txt` en la carpeta `txt/` (una URL por línea, se ignoran líneas vacías o que empiecen por `#`) y ejecuta `utils.pipeline.rebuild_rag_from_urls` con el fichero seleccionado.
 3. En ambos casos se crawlera con Crawl4AI, se limpia/slugify y se deduplican páginas por fingerprint.
-4. Chunking conserva jerarquía y bloques de código, con solapado configurable.
+4. Chunking conserva jerarquía y bloques de código, con solapado configurable (`chunking.respect_headings` y `chunking.preserve_code_blocks`).
 5. Se embebe con el modelo definido por el modo (`Qwen/Qwen3-Embedding-0.6B` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en DuckDB (`FLOAT[dim]`).
 6. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
    - Rendimiento: la creación de índices HNSW/FTS se difiere hasta después de la inserción masiva de `docs/chunks` para evitar mantenimiento incremental por fila. Esto reduce sensiblemente el tiempo total de rebuild a corpus medio/grande.
@@ -44,6 +44,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `python_cli_start`, `python_cli_send`, `python_cli_stop`, `python_cli_restart`: manejo de sesiones Python interactivas (ver `Extra/Guias/cli_interactiva.md`).
+- `python_call_function`: ejecuta una función Python en un subproceso (no interactivo). Por defecto está deshabilitada en `config.yaml` y sólo permite módulos `utils.*`/`scripts.*`.
 - `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`: tools para gestionar items por proyecto (memorias/docs/bugs/todos). `store_item`/`update_item` aceptan `typed` (campos obligatorios por tipo) y `meta` opcional; `patch_doc` edita docs por diff.
 - El servidor MCP publica los esquemas (`outputSchema`) a partir de la definición en `mcp_server/toolset.py`; las validaciones adicionales (ASCII, mínimos, etc.) las aplica `Retriever` al recibir la consulta.
 - Puedes activar o desactivar tools expuestas por el servidor MCP desde `config.yaml` mediante conjuntos (`mcp.tool_sets`), por ejemplo:

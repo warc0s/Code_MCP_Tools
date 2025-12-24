@@ -33,7 +33,10 @@ def _tail_with_overlap(text: str, overlap_tokens: int) -> str:
     return " ".join(tail)
 
 
-def _split_sections(markdown: str) -> List[Tuple[str, List[str]]]:
+def _split_sections(markdown: str, respect_headings: bool = True) -> List[Tuple[str, List[str]]]:
+    if not respect_headings:
+        return [("Document", markdown.splitlines())]
+
     lines = markdown.splitlines()
     sections: List[Tuple[str, List[str]]] = []
     section_stack: List[str] = []
@@ -64,7 +67,30 @@ def _split_sections(markdown: str) -> List[Tuple[str, List[str]]]:
     return sections
 
 
-def _build_units(lines: List[str]) -> List[str]:
+def _build_units(lines: List[str], preserve_code_blocks: bool = True) -> List[str]:
+    if not preserve_code_blocks:
+        units: List[str] = []
+        buffer: List[str] = []
+
+        def flush():
+            nonlocal buffer
+            text = "\n".join(buffer).strip("\n")
+            if text:
+                units.append(text)
+            buffer = []
+
+        for raw_line in lines:
+            line = raw_line.rstrip("\n")
+            stripped = line.strip()
+            if stripped == "":
+                buffer.append(line)
+                flush()
+            else:
+                buffer.append(line)
+        if buffer:
+            flush()
+        return [unit for unit in units if unit.strip()]
+
     units: List[str] = []
     buffer: List[str] = []
     inside_code = False
@@ -105,8 +131,8 @@ def chunk_document(markdown: str, config: ChunkingConfig) -> List[Dict[str, str 
     chunks: List[Dict[str, str | int]] = []
     position = 0
 
-    for section_path, lines in _split_sections(markdown):
-        units = _build_units(lines)
+    for section_path, lines in _split_sections(markdown, respect_headings=config.respect_headings):
+        units = _build_units(lines, preserve_code_blocks=config.preserve_code_blocks)
         if not units:
             continue
 

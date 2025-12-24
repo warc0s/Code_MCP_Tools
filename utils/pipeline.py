@@ -199,7 +199,7 @@ def rebuild_rag_from_sitemap(
     embedder: Optional[EmbeddingProvider] = None,
     progress_cb: Optional[ProgressCallback] = None,
 ) -> IngestionSummary:
-    embedder = embedder or EmbeddingProvider(config.embeddings)
+    embedder = embedder or EmbeddingProvider(config.embeddings, mode=config.main.mode)
     crawled_docs = crawl_sitemap(sitemap_url, config.crawling)
     return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder, progress_cb=progress_cb)
 
@@ -210,6 +210,6 @@ def rebuild_rag_from_urls(
     embedder: Optional[EmbeddingProvider] = None,
     progress_cb: Optional[ProgressCallback] = None,
 ) -> IngestionSummary:
-    embedder = embedder or EmbeddingProvider(config.embeddings)
+    embedder = embedder or EmbeddingProvider(config.embeddings, mode=config.main.mode)
     crawled_docs = crawl_url_list(list(urls), config.crawling)
     return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder, progress_cb=progress_cb)

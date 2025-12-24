@@ -34,3 +34,23 @@ def test_build_python_command_script_error_messages_are_informative(tmp_path):
         })
     msg = str(ei.value)
     assert "repo_root=" in msg and "resolved=" in msg
+
+
+def test_build_python_command_rejects_prefix_confusion_workdir(tmp_path, monkeypatch):
+    repo_root = tmp_path / "Auto_MCP_Tools"
+    evil_root = tmp_path / "Auto_MCP_Tools_evil"
+    repo_root.mkdir(parents=True, exist_ok=True)
+    evil_root.mkdir(parents=True, exist_ok=True)
+    (evil_root / "ok.py").write_text("print('hello')\n", encoding="utf-8")
+
+    monkeypatch.chdir(repo_root)
+
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    with pytest.raises(ValueError) as ei:
+        ts._build_python_command({
+            "mode": "script",
+            "workdir": "../Auto_MCP_Tools_evil",
+            "script_path": "ok.py",
+            "python_opts": {"unbuffered": True},
+        })
+    assert "Workdir fuera del repo" in str(ei.value)

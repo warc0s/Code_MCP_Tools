@@ -66,6 +66,6 @@ mcp:
     lexical_search: false
     python_cli_send: true
     python_cli_restart: true
-    python_call_function: true
+    python_call_function: false
 ui:
   selected_project: sologangas

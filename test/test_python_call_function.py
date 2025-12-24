@@ -15,7 +15,7 @@ def test_call_function_success_json_result():
     res = ts.call(
         "python_call_function",
         {
-            "module": "test.samples.simple_mod",
+            "module": "utils.python_call_samples",
             "function": "add",
             "args": [2, 3],
             "timeout_ms": 1000,
@@ -30,8 +30,8 @@ def test_call_function_unserializable_result():
     res = ts.call(
         "python_call_function",
         {
-            "module": "test.samples.simple_mod",
-            "function": "make_x",
+            "module": "utils.python_call_samples",
+            "function": "make_unserializable",
             "timeout_ms": 1000,
         },
     )
@@ -44,7 +44,7 @@ def test_call_function_timeout():
     res = ts.call(
         "python_call_function",
         {
-            "module": "test.samples.simple_mod",
+            "module": "utils.python_call_samples",
             "function": "slow",
             "timeout_ms": 100,
         },
@@ -52,3 +52,25 @@ def test_call_function_timeout():
     assert res.get("ok") is False
     assert res.get("error_type") in {"Timeout"}
 
+
+def test_call_function_rejects_disallowed_module():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    with pytest.raises(ValueError):
+        ts.call(
+            "python_call_function",
+            {"module": "os", "function": "getcwd"},
+        )
+
+
+def test_call_function_rejects_workdir_outside_repo():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    with pytest.raises(ValueError):
+        ts.call(
+            "python_call_function",
+            {
+                "module": "utils.python_call_samples",
+                "function": "add",
+                "args": [1, 2],
+                "workdir": "../",
+            },
+        )
