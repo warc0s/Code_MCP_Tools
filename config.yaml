@@ -46,8 +46,6 @@ reranker:
   model_name: Qwen/Qwen3-Reranker-0.6B
   cloud_model_name: Qwen/Qwen3-Reranker-4B
   max_length: 8192
-policy:
-  force_english_queries: true
 mcp:
   cli_logs_enabled: false
   tools:

@@ -4,6 +4,11 @@ import { showToast } from '../core/toast.js';
 import { log } from '../core/logger.js';
 import { setCurrentProject, state } from '../core/state.js';
 
+function _clearChildren(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
 function updateToolsRestartBanner() {
   const banner = document.getElementById('tools-restart-banner');
   if (!banner) return;
@@ -24,15 +29,22 @@ function updateProjectSlugHint() {
   const norm = normalizeSlug(raw);
   if (!raw.trim()) {
     hint.style.color = 'var(--text-tertiary)';
-    hint.innerHTML = 'Enter a project slug. It will be normalized to lowercase and dashes.';
+    _clearChildren(hint);
+    hint.textContent = 'Enter a project slug. It will be normalized to lowercase and dashes.';
     return;
   }
   if (norm !== raw) {
     hint.style.color = '#d97706';
-    hint.innerHTML = `Will be saved as: <code style="color: var(--text-secondary);">${norm}</code>`;
+    _clearChildren(hint);
+    hint.appendChild(document.createTextNode('Will be saved as: '));
+    const code = document.createElement('code');
+    code.style.cssText = 'color: var(--text-secondary);';
+    code.textContent = norm;
+    hint.appendChild(code);
   } else {
     hint.style.color = '#22c55e';
-    hint.innerHTML = 'Looks good ✓';
+    _clearChildren(hint);
+    hint.textContent = 'Looks good ✓';
   }
 }
 
@@ -44,31 +56,68 @@ export async function refreshProjects(event) {
   const list = document.getElementById('projects-list');
   if (!list) return;
   if (withAnimation) {
-    list.innerHTML = '';
+    _clearChildren(list);
     for (let i = 0; i < 4; i += 1) {
       const sk = document.createElement('li');
       sk.className = 'stagger-item';
-      sk.innerHTML = '<div class="skeleton" style="height: 46px; border-radius: 6px;"></div>';
+      const div = document.createElement('div');
+      div.className = 'skeleton';
+      div.style.cssText = 'height: 46px; border-radius: 6px;';
+      sk.appendChild(div);
       list.appendChild(sk);
     }
   }
   try {
     const data = await getProjects();
-    list.innerHTML = '';
+    _clearChildren(list);
     (data.projects || []).forEach((p) => {
       const li = document.createElement('li');
       const isActive = String(p.slug) === String(state.currentProjectSlug);
       li.className = withAnimation ? 'stagger-item' : '';
       li.style.cssText = 'padding: 8px; border: 1px solid var(--border-secondary); border-radius: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px;';
-      li.innerHTML = `<div><div style="font-weight:600; color: var(--text-primary);">${p.slug} ${isActive ? '<span style="margin-left:6px; font-size:11px; color:#22c55e;">(active)</span>' : ''}</div><div style="font-size:12px; color: var(--text-tertiary);">${p.name} · ${p.items_count || 0} items</div></div>
-      <div style="display:flex; gap:6px;">
-        <button class="ghost-btn" style="padding:4px 8px;" onclick="selectProject('${p.slug}')">Use</button>
-        <button class="ghost-btn" title="${isActive ? 'You cannot delete the active project' : 'Delete this project (removes all associated items)'}" style="padding:4px 8px;" onclick="deleteProject('${p.slug}')">Delete</button>
-      </div>`;
+
+      const left = document.createElement('div');
+      const top = document.createElement('div');
+      top.style.cssText = 'font-weight:600; color: var(--text-primary);';
+      top.textContent = (p.slug ?? '').toString();
+      if (isActive) {
+        const active = document.createElement('span');
+        active.style.cssText = 'margin-left:6px; font-size:11px; color:#22c55e;';
+        active.textContent = '(active)';
+        top.appendChild(active);
+      }
+      const bottom = document.createElement('div');
+      bottom.style.cssText = 'font-size:12px; color: var(--text-tertiary);';
+      const pname = (p.name ?? '').toString().trim() || '-';
+      bottom.textContent = `${pname} · ${p.items_count || 0} items`;
+      left.appendChild(top);
+      left.appendChild(bottom);
+
+      const actions = document.createElement('div');
+      actions.style.cssText = 'display:flex; gap:6px;';
+      const useBtn = document.createElement('button');
+      useBtn.className = 'ghost-btn';
+      useBtn.style.cssText = 'padding:4px 8px;';
+      useBtn.textContent = 'Use';
+      useBtn.addEventListener('click', () => selectProject(p.slug));
+      const delBtn = document.createElement('button');
+      delBtn.className = 'ghost-btn';
+      delBtn.style.cssText = 'padding:4px 8px;';
+      delBtn.title = isActive ? 'You cannot delete the active project' : 'Delete this project (removes all associated items)';
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', () => deleteProject(p.slug));
+      actions.appendChild(useBtn);
+      actions.appendChild(delBtn);
+
+      li.appendChild(left);
+      li.appendChild(actions);
       list.appendChild(li);
     });
     if ((data.projects || []).length === 0) {
-      list.innerHTML = '<li style="color: var(--text-quaternary); font-size: 12px;">No projects yet</li>';
+      const li = document.createElement('li');
+      li.style.cssText = 'color: var(--text-quaternary); font-size: 12px;';
+      li.textContent = 'No projects yet';
+      list.appendChild(li);
     }
   } catch (e) {
     showToast('Failed to load projects', 'error');
@@ -243,21 +292,34 @@ export async function refreshTools() {
     state.toolsNeedRestart = !!data.needs_restart;
     updateToolsRestartBanner();
     if (!container) return;
-    container.innerHTML = '';
+    _clearChildren(container);
     const isLight = document.body.classList.contains('light-mode');
     const hoverBg = isLight ? 'rgba(0, 0, 0, 0.03)' : 'rgba(255, 255, 255, 0.03)';
     Object.entries(toolGroups).forEach(([group, names]) => {
       const card = document.createElement('div');
       card.style.cssText = 'padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);';
       const nice = (group || '').replace(/_/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
-      card.innerHTML = `<div style="font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 10px;">${nice}</div>`;
+      const header = document.createElement('div');
+      header.style.cssText = 'font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); font-weight: 600; margin-bottom: 10px;';
+      header.textContent = nice;
+      card.appendChild(header);
       names.forEach((name) => {
         const id = `tool-${group}-${name}`;
         const row = document.createElement('div');
         row.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 4px; transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);';
         row.onmouseover = () => { row.style.background = hoverBg; row.style.transform = 'translateX(4px)'; };
         row.onmouseout = () => { row.style.background = 'transparent'; row.style.transform = 'translateX(0)'; };
-        row.innerHTML = `<input type="checkbox" id="${id}" data-tool="${name}" ${enabled.includes(name) ? 'checked' : ''}> <label for="${id}" style="font-size: 13px; color: var(--text-primary); cursor: pointer; flex: 1;">${name}</label>`;
+        const chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.id = id;
+        chk.dataset.tool = name;
+        chk.checked = enabled.includes(name);
+        const label = document.createElement('label');
+        label.htmlFor = id;
+        label.style.cssText = 'font-size: 13px; color: var(--text-primary); cursor: pointer; flex: 1;';
+        label.textContent = name;
+        row.appendChild(chk);
+        row.appendChild(label);
         card.appendChild(row);
       });
       container.appendChild(card);

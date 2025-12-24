@@ -6,6 +6,11 @@ import { state } from '../core/state.js';
 
 let rebuildEventSource = null;
 
+function _clearChildren(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
 function _formatStage(stage) {
   const s = (stage || '').toString().trim().toLowerCase();
   if (!s || s === 'idle') return 'Idle';
@@ -76,14 +81,24 @@ function updateStatusUI(data) {
   }
   const list = document.getElementById('sample-urls');
   if (list) {
-    list.innerHTML = '';
+    _clearChildren(list);
     if ((data.sample_urls || []).length === 0) {
-      list.innerHTML = '<li style="color: var(--text-quaternary); font-style: italic;">No registered URLs</li>';
+      const li = document.createElement('li');
+      li.style.cssText = 'color: var(--text-quaternary); font-style: italic;';
+      li.textContent = 'No registered URLs';
+      list.appendChild(li);
     } else {
       (data.sample_urls || []).forEach((u) => {
         const li = document.createElement('li');
         li.style.cssText = 'display: flex; align-items: start; gap: 8px; word-break: break-all;';
-        li.innerHTML = `<span style="color: var(--text-tertiary); flex-shrink: 0;">→</span><span style="flex: 1;">${u}</span>`;
+        const arrow = document.createElement('span');
+        arrow.style.cssText = 'color: var(--text-tertiary); flex-shrink: 0;';
+        arrow.textContent = '→';
+        const text = document.createElement('span');
+        text.style.cssText = 'flex: 1;';
+        text.textContent = (u ?? '').toString();
+        li.appendChild(arrow);
+        li.appendChild(text);
         list.appendChild(li);
       });
     }
@@ -117,22 +132,53 @@ export async function refreshDocs() {
   const data = await getDocs();
   const tbody = document.getElementById('docs-table');
   if (!tbody) return;
-  tbody.innerHTML = '';
+  _clearChildren(tbody);
   if ((data.docs || []).length === 0) {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td colspan="4" style="text-align: center; padding: 48px 24px; color: var(--text-tertiary);">
-      <svg style="width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.4;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-      </svg>
-      <div style="font-size: 13px;">No documents indexed yet</div>
-      <div style="font-size: 11px; margin-top: 4px; opacity: 0.7;">Use the Ingest tab to add documents</div>
-    </td>`;
+    const td = document.createElement('td');
+    td.colSpan = 4;
+    td.style.cssText = 'text-align: center; padding: 48px 24px; color: var(--text-tertiary);';
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('style', 'width: 48px; height: 48px; margin: 0 auto 12px; opacity: 0.4;');
+    svg.setAttribute('fill', 'none');
+    svg.setAttribute('viewBox', '0 0 24 24');
+    svg.setAttribute('stroke', 'currentColor');
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('stroke-linecap', 'round');
+    path.setAttribute('stroke-linejoin', 'round');
+    path.setAttribute('d', 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z');
+    svg.appendChild(path);
+    const title = document.createElement('div');
+    title.style.cssText = 'font-size: 13px;';
+    title.textContent = 'No documents indexed yet';
+    const subtitle = document.createElement('div');
+    subtitle.style.cssText = 'font-size: 11px; margin-top: 4px; opacity: 0.7;';
+    subtitle.textContent = 'Use the Ingest tab to add documents';
+    td.appendChild(svg);
+    td.appendChild(title);
+    td.appendChild(subtitle);
+    tr.appendChild(td);
     tbody.appendChild(tr);
     return;
   }
   data.docs.forEach((doc) => {
     const tr = document.createElement('tr');
-    tr.innerHTML = `<td style="font-family: 'SF Mono', Monaco, monospace; font-size: 11px; color: var(--text-secondary);">${doc.doc_id}</td><td style="color: var(--text-primary);">${doc.title || '-'}</td><td style="font-size: 12px; color: var(--text-tertiary); max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${doc.url || '-'}</td><td style="font-size: 12px; color: var(--text-quaternary);">${doc.created_at || '-'}</td>`;
+    const tdId = document.createElement('td');
+    tdId.style.cssText = "font-family: 'SF Mono', Monaco, monospace; font-size: 11px; color: var(--text-secondary);";
+    tdId.textContent = (doc?.doc_id ?? '-').toString();
+    const tdTitle = document.createElement('td');
+    tdTitle.style.cssText = 'color: var(--text-primary);';
+    tdTitle.textContent = (doc?.title ?? '-').toString() || '-';
+    const tdUrl = document.createElement('td');
+    tdUrl.style.cssText = 'font-size: 12px; color: var(--text-tertiary); max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
+    tdUrl.textContent = (doc?.url ?? '-').toString() || '-';
+    const tdCreated = document.createElement('td');
+    tdCreated.style.cssText = 'font-size: 12px; color: var(--text-quaternary);';
+    tdCreated.textContent = (doc?.created_at ?? '-').toString() || '-';
+    tr.appendChild(tdId);
+    tr.appendChild(tdTitle);
+    tr.appendChild(tdUrl);
+    tr.appendChild(tdCreated);
     tbody.appendChild(tr);
   });
 }
@@ -143,7 +189,7 @@ export async function refreshFiles() {
   fills.forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
-    select.innerHTML = '';
+    _clearChildren(select);
     (data.files || []).forEach((f) => {
       const opt = document.createElement('option');
       opt.value = f; opt.text = f; select.appendChild(opt);

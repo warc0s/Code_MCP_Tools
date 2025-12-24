@@ -524,6 +524,16 @@ class ItemService:
         project_db_id, project_slug, project_name = self._ensure_project(project, project_id)
         # Fetch current item to evaluate conditional constraints
         current_item = self.get_item(project=project, project_id=project_id, item_id=item_id)
+        # Optional type hint: reject mismatches to help MCP/UI clients validate payloads
+        hinted_type = fields.get("type") if isinstance(fields, dict) else None
+        if hinted_type is not None:
+            normalized = str(hinted_type).strip().lower()
+            if normalized not in ALLOWED_ITEM_TYPES:
+                raise ValueError("Unsupported type hint.")
+            if normalized != current_item.type:
+                raise ValueError(
+                    f"Item type mismatch: requested '{normalized}' but item is '{current_item.type}'."
+                )
         # Determine final status (after update) to enforce resolution requirements
         requested_status = fields.get("status") if isinstance(fields, dict) else None
         final_status = _validate_status(requested_status) if requested_status is not None else current_item.status

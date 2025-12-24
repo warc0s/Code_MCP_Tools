@@ -14,7 +14,12 @@ import re as _re
 import shlex as _shlex
 from pathlib import Path as _Path
 from utils.items import ItemService
-from utils.item_meta import meta_json_schema_oneof, typed_json_schema_oneof
+from utils.item_meta import (
+    meta_json_schema,
+    meta_json_schema_oneof,
+    typed_json_schema,
+    typed_json_schema_oneof,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -332,6 +337,47 @@ class RAGToolset:
                         "typed": typed_json_schema_oneof(required=True),
                     },
                     "required": ["type", "title"],
+                    "allOf": [
+                        {
+                            "if": {"properties": {"type": {"const": "memory"}}},
+                            "then": {
+                                "required": ["typed"],
+                                "properties": {
+                                    "typed": typed_json_schema("memory", required=True),
+                                    "meta": meta_json_schema("memory"),
+                                },
+                            },
+                        },
+                        {
+                            "if": {"properties": {"type": {"const": "doc"}}},
+                            "then": {
+                                "properties": {
+                                    "typed": typed_json_schema("doc", required=True),
+                                    "meta": meta_json_schema("doc"),
+                                },
+                            },
+                        },
+                        {
+                            "if": {"properties": {"type": {"const": "bug"}}},
+                            "then": {
+                                "required": ["typed"],
+                                "properties": {
+                                    "typed": typed_json_schema("bug", required=True),
+                                    "meta": meta_json_schema("bug"),
+                                },
+                            },
+                        },
+                        {
+                            "if": {"properties": {"type": {"const": "todo"}}},
+                            "then": {
+                                "required": ["typed"],
+                                "properties": {
+                                    "typed": typed_json_schema("todo", required=True),
+                                    "meta": meta_json_schema("todo"),
+                                },
+                            },
+                        },
+                    ],
                 },
                 "output_schema": ITEM_OUTPUT_SCHEMA,
             },
@@ -347,12 +393,51 @@ class RAGToolset:
                         "fields": {
                             "type": "object",
                             "properties": {
+                                "type": {"type": "string", "enum": ["memory", "doc", "bug", "todo"]},
                                 "title": {"type": "string"},
                                 "tags": {"type": "array", "items": {"type": "string"}},
                                 "status": {"type": "string"},
                                 "meta": meta_json_schema_oneof(),
                                 "typed": typed_json_schema_oneof(required=False),
                             },
+                            "allOf": [
+                                {
+                                    "if": {"properties": {"type": {"const": "memory"}}},
+                                    "then": {
+                                        "properties": {
+                                            "typed": typed_json_schema("memory", required=False),
+                                            "meta": meta_json_schema("memory"),
+                                        }
+                                    },
+                                },
+                                {
+                                    "if": {"properties": {"type": {"const": "doc"}}},
+                                    "then": {
+                                        "properties": {
+                                            "typed": typed_json_schema("doc", required=False),
+                                            "meta": meta_json_schema("doc"),
+                                        }
+                                    },
+                                },
+                                {
+                                    "if": {"properties": {"type": {"const": "bug"}}},
+                                    "then": {
+                                        "properties": {
+                                            "typed": typed_json_schema("bug", required=False),
+                                            "meta": meta_json_schema("bug"),
+                                        }
+                                    },
+                                },
+                                {
+                                    "if": {"properties": {"type": {"const": "todo"}}},
+                                    "then": {
+                                        "properties": {
+                                            "typed": typed_json_schema("todo", required=False),
+                                            "meta": meta_json_schema("todo"),
+                                        }
+                                    },
+                                },
+                            ],
                         },
                     },
                     "required": ["id", "fields"],

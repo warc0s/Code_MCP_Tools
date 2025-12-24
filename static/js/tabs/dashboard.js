@@ -4,6 +4,11 @@ import { showToast } from '../core/toast.js';
 
 let baseGuidelines = '';
 
+function _clearChildren(el) {
+  if (!el) return;
+  while (el.firstChild) el.removeChild(el.firstChild);
+}
+
 function buildCodexSnippet(url) {
   const safeUrl = url || 'http://127.0.0.1:8000/mcp';
   return [
@@ -69,7 +74,7 @@ export async function refreshDashboardStatus() {
   if (others.length > 0) grouped.push({ group: 'other', names: others });
   const container = document.getElementById('runtime-tools-grouped');
   if (container) {
-    container.innerHTML = '';
+    _clearChildren(container);
     if (grouped.length === 0) {
       const p = document.createElement('div');
       p.style.cssText = 'font-size:12px; color: var(--text-quaternary); font-style: italic;';
@@ -79,7 +84,9 @@ export async function refreshDashboardStatus() {
       grouped.forEach(({ group, names }) => {
         const block = document.createElement('div');
         const nice = (group || '').replace(/_/g, ' ').replace(/\b[a-z]/g, (m) => m.toUpperCase());
-        block.innerHTML = `<div style="font-size:11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing:0.05em; margin-bottom:6px;">${nice}</div>`;
+        const header = document.createElement('div');
+        header.style.cssText = 'font-size:11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing:0.05em; margin-bottom:6px;';
+        header.textContent = nice;
         const list = document.createElement('div');
         list.style.cssText = 'display:flex; flex-wrap: wrap; gap:6px;';
         names.forEach((n) => {
@@ -88,6 +95,7 @@ export async function refreshDashboardStatus() {
           tag.textContent = n;
           list.appendChild(tag);
         });
+        block.appendChild(header);
         block.appendChild(list);
         container.appendChild(block);
       });
@@ -105,14 +113,24 @@ export async function refreshDashboardStatus() {
   }
   const list = document.getElementById('sample-urls-dashboard');
   if (list) {
-    list.innerHTML = '';
+    _clearChildren(list);
     if ((data.sample_urls || []).length === 0) {
-      list.innerHTML = '<li style="color: var(--text-quaternary); font-style: italic;">No registered URLs</li>';
+      const li = document.createElement('li');
+      li.style.cssText = 'color: var(--text-quaternary); font-style: italic;';
+      li.textContent = 'No registered URLs';
+      list.appendChild(li);
     } else {
       (data.sample_urls || []).forEach((u) => {
         const li = document.createElement('li');
         li.style.cssText = 'display: flex; align-items: start; gap: 8px; word-break: break-all;';
-        li.innerHTML = `<span style="color: var(--text-tertiary); flex-shrink: 0;">→</span><span style="flex: 1;">${u}</span>`;
+        const arrow = document.createElement('span');
+        arrow.style.cssText = 'color: var(--text-tertiary); flex-shrink: 0;';
+        arrow.textContent = '→';
+        const text = document.createElement('span');
+        text.style.cssText = 'flex: 1;';
+        text.textContent = (u ?? '').toString();
+        li.appendChild(arrow);
+        li.appendChild(text);
         list.appendChild(li);
       });
     }
@@ -124,11 +142,19 @@ export async function refreshDashboardStatus() {
   }
   const statusPill = document.getElementById('status-pill');
   if (statusPill) {
+    _clearChildren(statusPill);
+    const dot = document.createElement('span');
+    dot.className = 'pulse';
+    dot.style.cssText = 'width: 6px; height: 6px; border-radius: 50%;';
     if (data.db_exists) {
-      statusPill.innerHTML = '<span class="pulse" style="width: 6px; height: 6px; border-radius: 50%; background: #22c55e;"></span>MCP Ready';
+      dot.style.background = '#22c55e';
+      statusPill.appendChild(dot);
+      statusPill.appendChild(document.createTextNode('MCP Ready'));
       statusPill.style.cssText = 'background: rgba(34, 197, 94, 0.15); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.3); font-weight: 500;';
     } else {
-      statusPill.innerHTML = '<span class="pulse" style="width: 6px; height: 6px; border-radius: 50%; background: #ef4444;"></span>MCP Not Ready';
+      dot.style.background = '#ef4444';
+      statusPill.appendChild(dot);
+      statusPill.appendChild(document.createTextNode('MCP Not Ready'));
       statusPill.style.cssText = 'background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 500;';
     }
   }

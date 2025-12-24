@@ -132,9 +132,14 @@ def validate_typed_required(item_type: str, typed: Dict[str, Any]) -> Dict[str, 
     raise ValueError("Unsupported item type for typed validation.")
 
 
-def typed_json_schema_oneof(required: bool = True) -> Dict[str, Any]:
-    # JSON schema for 'typed' field per item type. If required=False, no required keys (for updates)
-    def mem_schema():
+def typed_json_schema(item_type: str, required: bool = True) -> Dict[str, Any]:
+    """Return JSON Schema for the `typed` object for a given item type.
+
+    - When `required=True`, the schema includes required keys for types that enforce them.
+    - When `required=False`, the schema accepts partial updates (used by update_item).
+    """
+    t = (item_type or "").strip().lower()
+    if t == "memory":
         props = {
             "topic": {"type": "string"},
             "decision": {"type": "string"},
@@ -142,38 +147,47 @@ def typed_json_schema_oneof(required: bool = True) -> Dict[str, Any]:
             "rationale": {"type": "string"},
             "related_links": {"type": "array", "items": {"type": "string"}},
         }
-        return {"type": "object", "properties": props, **({"required": ["topic", "decision", "context", "rationale"]} if required else {})}
-
-    def doc_schema():
+        schema: Dict[str, Any] = {"type": "object", "properties": props}
+        if required:
+            schema["required"] = ["topic", "decision", "context", "rationale"]
+        return schema
+    if t == "doc":
         props = {
             "authors": {"type": "array", "items": {"type": "string"}},
             "related_docs": {"type": "array", "items": {"type": "string"}},
         }
         return {"type": "object", "properties": props}
-
-    def bug_schema():
+    if t == "bug":
         props = {
             "severity": {"type": "string", "enum": ["high", "medium", "low"]},
             "reproduction": {"type": "string"},
             "expected": {"type": "string"},
             "root_cause": {"type": "string"},
         }
-        return {"type": "object", "properties": props, **({"required": ["severity", "reproduction", "expected", "root_cause"]} if required else {})}
-
-    def todo_schema():
+        schema = {"type": "object", "properties": props}
+        if required:
+            schema["required"] = ["severity", "reproduction", "expected", "root_cause"]
+        return schema
+    if t == "todo":
         props = {
             "kind": {"type": "string", "enum": ["bug_fix", "refactor", "feature", "chore"]},
             "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
             "priority": {"type": "string", "enum": ["p0", "p1", "p2"]},
         }
-        return {"type": "object", "properties": props, **({"required": ["kind", "acceptance_criteria", "priority"]} if required else {})}
+        schema = {"type": "object", "properties": props}
+        if required:
+            schema["required"] = ["kind", "acceptance_criteria", "priority"]
+        return schema
+    raise ValueError("Unsupported item type for typed schema.")
 
+
+def typed_json_schema_oneof(required: bool = True) -> Dict[str, Any]:
     return {
         "oneOf": [
-            {"title": "memory", **mem_schema()},
-            {"title": "doc", **doc_schema()},
-            {"title": "bug", **bug_schema()},
-            {"title": "todo", **todo_schema()},
+            {"title": "memory", **typed_json_schema("memory", required=required)},
+            {"title": "doc", **typed_json_schema("doc", required=required)},
+            {"title": "bug", **typed_json_schema("bug", required=required)},
+            {"title": "todo", **typed_json_schema("todo", required=required)},
         ]
     }
 
@@ -212,5 +226,6 @@ __all__ = [
     "meta_json_schema",
     "meta_json_schema_oneof",
     "validate_typed_required",
+    "typed_json_schema",
     "typed_json_schema_oneof",
 ]

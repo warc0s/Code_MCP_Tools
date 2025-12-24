@@ -109,11 +109,6 @@ class RerankerConfig:
 
 
 @dataclass(frozen=True)
-class PolicyConfig:
-    force_english_queries: bool = True
-
-
-@dataclass(frozen=True)
 class MCPConfig:
     tools: Dict[str, bool] = field(default_factory=dict)
     tool_sets: Dict[str, Dict[str, bool]] = field(default_factory=dict)
@@ -142,7 +137,6 @@ class AppConfig:
     embeddings: EmbeddingConfig = field(default_factory=EmbeddingConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     reranker: RerankerConfig = field(default_factory=RerankerConfig)
-    policy: PolicyConfig = field(default_factory=PolicyConfig)
     mcp: MCPConfig = field(default_factory=MCPConfig)
     ui: UIConfig = field(default_factory=UIConfig)
 
@@ -171,7 +165,6 @@ class AppConfig:
             embeddings=get_section("embeddings", EmbeddingConfig),
             retrieval=get_section("retrieval", RetrievalConfig),
             reranker=get_section("reranker", RerankerConfig),
-            policy=get_section("policy", PolicyConfig),
             mcp=get_section("mcp", MCPConfig),
             ui=get_section("ui", UIConfig),
         )
@@ -197,7 +190,6 @@ __all__ = [
     "UIConfig",
     "MCPConfig",
     "MainConfig",
-    "PolicyConfig",
     "RetrievalConfig",
     "RerankerConfig",
 ]

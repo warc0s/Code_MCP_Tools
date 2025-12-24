@@ -26,3 +26,42 @@ def test_hybrid_search_description_recommends_top_k():
     assert "Recommended top_k" in desc
     assert "6" in desc
     assert "Do not call in parallel" in desc
+
+
+def test_store_item_schema_correlates_type_to_typed_and_meta():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    tools = ts.list_tools()
+    schema = tools["store_item"]["schema"]
+    assert schema.get("type") == "object"
+    all_of = schema.get("allOf")
+    assert isinstance(all_of, list) and all_of, "store_item schema must include allOf rules"
+
+    seen: set[str] = set()
+    for rule in all_of:
+        t = (
+            (rule.get("if") or {})
+            .get("properties", {})
+            .get("type", {})
+            .get("const")
+        )
+        if not t:
+            continue
+        seen.add(t)
+        then = rule.get("then") or {}
+        props = then.get("properties") or {}
+        assert "typed" in props and "meta" in props
+        if t in {"memory", "bug", "todo"}:
+            assert "typed" in (then.get("required") or [])
+
+    assert {"memory", "doc", "bug", "todo"}.issubset(seen)
+
+
+def test_update_item_schema_supports_optional_type_hint():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    tools = ts.list_tools()
+    schema = tools["update_item"]["schema"]
+    fields = schema.get("properties", {}).get("fields", {})
+    assert fields.get("type") == "object"
+    assert "type" in (fields.get("properties") or {}), "fields.type should exist as an optional hint"
+    all_of = fields.get("allOf")
+    assert isinstance(all_of, list) and all_of, "update_item fields should include allOf rules"
