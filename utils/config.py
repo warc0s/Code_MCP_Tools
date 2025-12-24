@@ -53,7 +53,7 @@ class MemoryDatabaseConfig:
 
 @dataclass(frozen=True)
 class CrawlingConfig:
-    workers: int = 8
+    workers: int = 1
     pattern: str = "*"
     max_urls: int = -1
     cache_mode: str = "disabled"

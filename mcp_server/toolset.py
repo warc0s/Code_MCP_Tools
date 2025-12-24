@@ -177,7 +177,7 @@ class RAGToolset:
             },
             "hybrid_search": {
                 "title": "Hybrid search",
-                "description": "Hybrid dense+lexical search with score fusion, MMR and optional reranking.",
+                "description": "Hybrid dense+lexical search with score fusion, MMR and optional reranking. Recommended top_k: 6 (increase for recall). Do not call in parallel; run sequentially.",
                 "schema": {
                     "type": "object",
                     "properties": {

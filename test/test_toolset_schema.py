@@ -17,3 +17,12 @@ def test_toolset_declares_output_schema():
     # Al menos una tool debe declarar output_schema (p. ej., hybrid_search)
     assert any("output_schema" in spec for spec in tools.values())
 
+
+def test_hybrid_search_description_recommends_top_k():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    tools = ts.list_tools()
+    assert "hybrid_search" in tools
+    desc = tools["hybrid_search"].get("description", "")
+    assert "Recommended top_k" in desc
+    assert "6" in desc
+    assert "Do not call in parallel" in desc

@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from dataclasses import dataclass
-from typing import Iterable, Optional
+from typing import Callable, Iterable, Optional
 
 from tqdm import tqdm
 
@@ -24,16 +24,22 @@ class IngestionSummary:
     chunks: int
 
 
+ProgressCallback = Callable[[dict], None]
+
+
 def _rebuild_rag_from_crawled_documents(
     crawled_docs: Iterable[CrawledDocument],
     config: AppConfig,
     embedder: EmbeddingProvider,
+    progress_cb: Optional[ProgressCallback] = None,
 ) -> IngestionSummary:
     crawled_docs = list(crawled_docs)
     if not crawled_docs:
         raise RuntimeError("No se recuperaron páginas para la ingesta.")
 
     print(f"Documentos crawlerados: {len(crawled_docs)}")
+    if progress_cb:
+        progress_cb({"stage": "chunking", "documents": len(crawled_docs)})
 
     doc_rows: list[DocumentRow] = []
     chunk_payload: list[dict] = []
@@ -70,6 +76,16 @@ def _rebuild_rag_from_crawled_documents(
         raise RuntimeError("No se generaron chunks tras el proceso de chunking.")
 
     print(f"Chunks únicos listos para embebido: {len(chunk_payload)}")
+    if progress_cb:
+        progress_cb(
+            {
+                "stage": "embedding",
+                "documents": len(crawled_docs),
+                "chunks": len(chunk_payload),
+                "total": len(chunk_payload),
+                "done": 0,
+            }
+        )
 
     texts = [payload["text"] for payload in chunk_payload]
     embeddings: list[list[float]] = []
@@ -82,6 +98,16 @@ def _rebuild_rag_from_crawled_documents(
                 raise RuntimeError("El proveedor de embeddings devolvió un lote con longitud inesperada.")
             embeddings.extend(batch_vectors)
             progress.update(len(batch_vectors))
+            if progress_cb:
+                progress_cb(
+                    {
+                        "stage": "embedding",
+                        "documents": len(crawled_docs),
+                        "chunks": len(chunk_payload),
+                        "total": len(chunk_payload),
+                        "done": len(embeddings),
+                    }
+                )
 
     if len(embeddings) != len(chunk_payload):
         raise RuntimeError("Faltan vectores de embeddings para completar la ingesta.")
@@ -89,12 +115,32 @@ def _rebuild_rag_from_crawled_documents(
     embedding_dim = embedder.embedding_dim
 
     print("Embeddings generados. Inicializando base de datos DuckDB...")
+    if progress_cb:
+        progress_cb(
+            {
+                "stage": "duckdb_init",
+                "documents": len(crawled_docs),
+                "chunks": len(chunk_payload),
+                "total": len(chunk_payload),
+                "done": len(chunk_payload),
+            }
+        )
 
     manager = DuckDBManager(config.database, embedding_dim)
     manager.reset()
     manager.initialize_schema()
 
     print("Insertando documentos y chunks en DuckDB...")
+    if progress_cb:
+        progress_cb(
+            {
+                "stage": "duckdb_insert",
+                "documents": len(crawled_docs),
+                "chunks": len(chunk_payload),
+                "total": len(chunk_payload),
+                "done": len(chunk_payload),
+            }
+        )
 
     chunk_rows: list[ChunkRow] = []
     for payload, vector in zip(chunk_payload, embeddings):
@@ -117,6 +163,16 @@ def _rebuild_rag_from_crawled_documents(
     manager.insert_chunks(chunk_rows)
     # Crear índices pesados tras la carga para evitar mantenimiento incremental por fila
     manager.create_indexes()
+    if progress_cb:
+        progress_cb(
+            {
+                "stage": "done",
+                "documents": len(doc_rows),
+                "chunks": len(chunk_rows),
+                "total": len(chunk_payload),
+                "done": len(chunk_payload),
+            }
+        )
 
     reranker_model = (
         config.reranker.model_name
@@ -141,17 +197,19 @@ def rebuild_rag_from_sitemap(
     sitemap_url: str,
     config: AppConfig,
     embedder: Optional[EmbeddingProvider] = None,
+    progress_cb: Optional[ProgressCallback] = None,
 ) -> IngestionSummary:
     embedder = embedder or EmbeddingProvider(config.embeddings)
     crawled_docs = crawl_sitemap(sitemap_url, config.crawling)
-    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder)
+    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder, progress_cb=progress_cb)
 
 
 def rebuild_rag_from_urls(
     urls: Iterable[str],
     config: AppConfig,
     embedder: Optional[EmbeddingProvider] = None,
+    progress_cb: Optional[ProgressCallback] = None,
 ) -> IngestionSummary:
     embedder = embedder or EmbeddingProvider(config.embeddings)
     crawled_docs = crawl_url_list(list(urls), config.crawling)
-    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder)
+    return _rebuild_rag_from_crawled_documents(crawled_docs, config, embedder, progress_cb=progress_cb)

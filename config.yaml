@@ -5,19 +5,18 @@ database:
 memory_database:
   path: data/memory.sqlite3
 crawling:
-  workers: 8
+  workers: 1
   pattern: '*'
   max_urls: -1
   cache_mode: disabled
   text_mode: false
   enable_stealth: false
-  # user_agent: "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"
   word_count_threshold: 5
   excluded_tags:
-    - nav
-    - footer
-    - aside
-    - form
+  - nav
+  - footer
+  - aside
+  - form
   pruning_threshold: 0.2
   pruning_min_word_threshold: 5
   min_markdown_chars: 25
@@ -32,7 +31,7 @@ embeddings:
   cloud_model_name: text-embedding-3-small
   normalize_embeddings: true
   query_prompt_name: query
-  batch_size: 64
+  batch_size: 16
 retrieval:
   dense_topk: 24
   lexical_topk: 24
@@ -69,4 +68,4 @@ mcp:
     python_cli_restart: true
     python_call_function: true
 ui:
-  selected_project: proyect
+  selected_project: sologangas

@@ -4,6 +4,61 @@ import { showToast } from '../core/toast.js';
 import { isValidUrl, setButtonLoading } from '../core/utils.js';
 import { state } from '../core/state.js';
 
+let rebuildEventSource = null;
+
+function _formatStage(stage) {
+  const s = (stage || '').toString().trim().toLowerCase();
+  if (!s || s === 'idle') return 'Idle';
+  if (s === 'starting') return 'Starting…';
+  if (s === 'crawling') return 'Crawling…';
+  if (s === 'chunking') return 'Chunking…';
+  if (s === 'embedding') return 'Embedding…';
+  if (s === 'duckdb_init') return 'Initializing DuckDB…';
+  if (s === 'duckdb_insert') return 'Writing chunks…';
+  if (s === 'done') return 'Done';
+  if (s === 'error') return 'Error';
+  return stage;
+}
+
+function updateRebuildProgressUI(progress, rebuildRunning) {
+  const status = document.getElementById('rebuild-progress-status');
+  const bar = document.getElementById('rebuild-progress-bar');
+  const meta = document.getElementById('rebuild-progress-meta');
+  if (!status && !bar && !meta) return;
+
+  const p = progress || {};
+  const stageText = _formatStage(p.stage);
+  const total = Number.isFinite(Number(p.total)) ? Number(p.total) : 0;
+  const done = Number.isFinite(Number(p.done)) ? Number(p.done) : 0;
+  const documents = Number.isFinite(Number(p.documents)) ? Number(p.documents) : 0;
+  const chunks = Number.isFinite(Number(p.chunks)) ? Number(p.chunks) : 0;
+
+  const pct = total > 0 ? Math.max(0, Math.min(100, Math.round((done / total) * 100))) : 0;
+  if (bar) bar.style.width = total > 0 ? `${pct}%` : (rebuildRunning ? '4%' : '0%');
+
+  const msg = (p.message || '').toString().trim();
+  const err = (p.error || '').toString().trim();
+  const summary = [];
+  if (documents) summary.push(`${documents} docs`);
+  if (chunks) summary.push(`${chunks} chunks`);
+  if (total) summary.push(`${done}/${total} (${pct}%)`);
+
+  if (status) {
+    let line = stageText;
+    if (summary.length) line += ` · ${summary.join(' · ')}`;
+    if (msg) line += ` · ${msg}`;
+    if (err) line += ` · ${err}`;
+    status.innerText = line;
+  }
+  if (meta) {
+    if (rebuildRunning) {
+      meta.innerText = 'Live progress is streamed; no status polling loop needed.';
+    } else {
+      meta.innerText = '';
+    }
+  }
+}
+
 function updateStatusUI(data) {
   const mode = document.getElementById('mode');
   if (mode) mode.innerText = data.mode || '-';
@@ -46,9 +101,9 @@ function updateStatusUI(data) {
 }
 
 export async function refreshStatus() {
-  log('Updating status...');
   const data = await getStatus();
   updateStatusUI(data);
+  updateRebuildProgressUI(data.rebuild_progress, data.rebuild_running);
   if (state.statusAuto.active && !data.rebuild_running) {
     setStatusAutoRefresh(false);
     if (!state.statusAuto.notifiedDone) {
@@ -102,7 +157,7 @@ export function setStatusAutoRefresh(enable) {
     if (st.active && st.id) return;
     st.active = true; st.notifiedDone = false;
     try {
-      st.id = setInterval(() => { refreshStatus().catch(() => {}); }, 2000);
+      st.id = setInterval(() => { refreshStatus().catch(() => {}); }, 10000);
     } catch (_) {
       st.id = null; st.active = false;
     }
@@ -113,6 +168,54 @@ export function setStatusAutoRefresh(enable) {
     }
     st.active = false;
   }
+}
+
+export function startRebuildMonitoring() {
+  try {
+    if (rebuildEventSource) {
+      try { rebuildEventSource.close(); } catch (_) { /* ignore */ }
+      rebuildEventSource = null;
+    }
+    if (typeof EventSource === 'undefined') {
+      setStatusAutoRefresh(true);
+      return;
+    }
+    rebuildEventSource = new EventSource('/ui/api/rebuild/events');
+    rebuildEventSource.onmessage = (ev) => {
+      try {
+        const payload = JSON.parse(ev.data || '{}');
+        updateRebuildProgressUI(payload.progress, payload.rebuild_running);
+        const rebuildFlag = document.getElementById('rebuild-flag');
+        if (rebuildFlag) {
+          rebuildFlag.classList.toggle('hidden', !payload.rebuild_running);
+          if (payload.rebuild_running) rebuildFlag.classList.add('pulse'); else rebuildFlag.classList.remove('pulse');
+        }
+        const stage = (payload.progress?.stage || '').toString().toLowerCase();
+        if (!payload.rebuild_running && (stage === 'done' || stage === 'error')) {
+          stopRebuildMonitoring();
+          if (stage === 'done') showToast('Index finished', 'success');
+          if (stage === 'error') showToast('Index failed', 'error');
+          refreshStatus().catch(() => {});
+          refreshDocs().catch(() => {});
+        }
+      } catch (_) { /* ignore */ }
+    };
+    rebuildEventSource.onerror = () => {
+      // Fallback: if SSE fails (proxy, browser), fall back to a slower poll.
+      stopRebuildMonitoring();
+      setStatusAutoRefresh(true);
+    };
+  } catch (_) {
+    setStatusAutoRefresh(true);
+  }
+}
+
+export function stopRebuildMonitoring() {
+  if (rebuildEventSource) {
+    try { rebuildEventSource.close(); } catch (_) { /* ignore */ }
+    rebuildEventSource = null;
+  }
+  setStatusAutoRefresh(false);
 }
 
 function _resolveButton(elOrEvent) {
@@ -132,13 +235,13 @@ export async function rebuildSitemap(elOrEvent) {
   if (!isValidUrl(url)) { showToast('Invalid URL format', 'error'); log('Invalid URL format'); return; }
   const btn = _resolveButton(elOrEvent);
   setButtonLoading(btn, true);
-  showToast('Indexing started. Status will update every 2s…', 'success');
-  setStatusAutoRefresh(true);
+  showToast('Indexing started. Live progress will stream…', 'success');
+  startRebuildMonitoring();
   try {
     const data = await apiRebuildSitemap(url);
     log(`Rebuilt: docs=${data.documents} chunks=${data.chunks}`);
     showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
-    setStatusAutoRefresh(false); state.statusAuto.notifiedDone = true;
+    stopRebuildMonitoring(); state.statusAuto.notifiedDone = true;
     showIngestSummaryModal(data.documents, data.chunks);
     refreshStatus();
     refreshDocs();
@@ -156,13 +259,13 @@ export async function rebuildFile(elOrEvent) {
   if (!file) { showToast('Please select a file', 'error'); log('Select a file'); return; }
   const btn = _resolveButton(elOrEvent);
   setButtonLoading(btn, true);
-  showToast('Indexing started. Status will update every 2s…', 'success');
-  setStatusAutoRefresh(true);
+  showToast('Indexing started. Live progress will stream…', 'success');
+  startRebuildMonitoring();
   try {
     const data = await apiRebuildFile(file);
     log(`Rebuilt: docs=${data.documents} chunks=${data.chunks}`);
     showToast(`Rebuilt successfully: ${data.documents} docs, ${data.chunks} chunks`, 'success');
-    setStatusAutoRefresh(false); state.statusAuto.notifiedDone = true;
+    stopRebuildMonitoring(); state.statusAuto.notifiedDone = true;
     showIngestSummaryModal(data.documents, data.chunks);
     refreshStatus();
     refreshDocs();
@@ -207,6 +310,8 @@ export function registerGlobals() {
   window.rebuildSitemap = rebuildSitemap;
   window.rebuildFile = rebuildFile;
   window.setStatusAutoRefresh = setStatusAutoRefresh;
+  window.startRebuildMonitoring = startRebuildMonitoring;
+  window.stopRebuildMonitoring = stopRebuildMonitoring;
   window.showIngestSummaryModal = showIngestSummaryModal;
   window.hideIngestSummaryModal = hideIngestSummaryModal;
   window.gotoRagDocs = gotoRagDocs;

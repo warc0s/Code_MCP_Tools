@@ -36,7 +36,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - Sesiones CLI inactivas o muy antiguas (>30 minutos) se limpian automáticamente para evitar fugas.
 - Python CLI: sesiones orientadas a Python (script o módulo). No ejecuta shell general.
 - El tab de configuración muestra un aviso dinámico `Config changed; rebuild the index...` cuando el backend marca `needs_rebuild=true` (p. ej. tras cambiar modelos o modo desde la propia UI).
-- Durante una reconstrucción (ingesta) el header muestra un pill `Rebuilding...` y el estado se refresca automáticamente cada 2s solo mientras dura la ingesta. Al terminar se detiene el auto‑refresh y se muestra un toast de finalización.
+- Durante una reconstrucción (ingesta) el header muestra un pill `Rebuilding...` y la UI recibe progreso en vivo vía SSE (`/ui/api/rebuild/events`) para evitar polling agresivo de `/ui/api/status`. Al terminar se cierra el stream y se muestra un toast de finalización.
   - También puedes pulsar “Refresh” manual cuando lo necesites.
   - El backend puede usar GPU automáticamente para generar embeddings si Torch detecta CUDA.
   - Los botones de ingesta (`Index from Sitemap` y `Index from File`) muestran estado de carga (spinner) sobre el propio botón durante la operación.

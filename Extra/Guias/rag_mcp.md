@@ -27,7 +27,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
   - Cambiar a `main.mode: cloud` para usar `text-embedding-3-small` (requiere `OPENAI_API_KEY`).
   - Usar un modelo local más ligero (p. ej., `sentence-transformers/all-MiniLM-L6-v2`, dim=384) si el dominio es EN y no necesitas multilingüe.
 - Índices: HNSW/FTS se crean tras la inserción (no antes) para acelerar la carga.
-- Crawler: ajusta `crawling.workers` (por defecto 8) y deja `cache_mode: enabled` para reutilizar descargas.
+- Crawler: ajusta `crawling.workers` (por defecto 1) y deja `cache_mode: enabled` para reutilizar descargas.
 
 ## Flujo de ingesta
 1. CLI opción 1.1 pide un sitemap y ejecuta `utils.pipeline.rebuild_rag_from_sitemap`.

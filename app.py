@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import subprocess
 import sys
+import threading
+import time
 import warnings
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -184,8 +187,42 @@ class AppState:
     item_service: Optional[ItemService] = None
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     rebuild_running: bool = False
+    rebuild_progress: Dict[str, Any] = field(default_factory=dict)
+    rebuild_progress_seq: int = 0
+    rebuild_progress_lock: threading.Lock = field(default_factory=threading.Lock, repr=False)
     config_dirty: bool = False
     restart_required: bool = False
+
+    def reset_rebuild_progress(self) -> None:
+        with self.rebuild_progress_lock:
+            self.rebuild_progress_seq += 1
+            now = time.time()
+            self.rebuild_progress = {
+                "seq": self.rebuild_progress_seq,
+                "stage": "starting",
+                "message": "Starting rebuild",
+                "total": 0,
+                "done": 0,
+                "documents": 0,
+                "chunks": 0,
+                "error": None,
+                "started_at": now,
+                "updated_at": now,
+            }
+
+    def update_rebuild_progress(self, patch: Dict[str, Any]) -> None:
+        with self.rebuild_progress_lock:
+            if not self.rebuild_progress:
+                self.reset_rebuild_progress()
+            self.rebuild_progress_seq += 1
+            self.rebuild_progress["seq"] = self.rebuild_progress_seq
+            if patch:
+                self.rebuild_progress.update(patch)
+            self.rebuild_progress["updated_at"] = time.time()
+
+    def snapshot_rebuild_progress(self) -> Dict[str, Any]:
+        with self.rebuild_progress_lock:
+            return dict(self.rebuild_progress or {})
 
     def close_connection(self) -> None:
         if self.connection:
@@ -395,13 +432,18 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
     return {"updated": updated_any, "needs_rebuild": state.config_dirty, "needs_restart": state.restart_required}
 
 
-def _run_rebuild_sitemap(url: str, config: AppConfig):
+def _run_rebuild_sitemap(url: str, state: AppState):
     ensure_extension_directory()
-    embedder = EmbeddingProvider(config.embeddings, mode=config.main.mode)
-    return rebuild_rag_from_sitemap(url, config, embedder)
+    embedder = EmbeddingProvider(state.config.embeddings, mode=state.config.main.mode)
+
+    def _cb(patch: Dict[str, Any]) -> None:
+        state.update_rebuild_progress(patch)
+
+    state.update_rebuild_progress({"stage": "crawling", "message": "Crawling sitemap"})
+    return rebuild_rag_from_sitemap(url, state.config, embedder, progress_cb=_cb)
 
 
-def _run_rebuild_urls_file(filename: str, config: AppConfig):
+def _run_rebuild_urls_file(filename: str, state: AppState):
     path = Path("txt") / filename
     if not path.is_file():
         raise FileNotFoundError(f"No se encontró el fichero {path}")
@@ -414,8 +456,13 @@ def _run_rebuild_urls_file(filename: str, config: AppConfig):
     if not urls:
         raise ValueError("El fichero no contiene URLs válidas.")
     ensure_extension_directory()
-    embedder = EmbeddingProvider(config.embeddings, mode=config.main.mode)
-    return rebuild_rag_from_urls(urls, config, embedder)
+    embedder = EmbeddingProvider(state.config.embeddings, mode=state.config.main.mode)
+
+    def _cb(patch: Dict[str, Any]) -> None:
+        state.update_rebuild_progress(patch)
+
+    state.update_rebuild_progress({"stage": "crawling", "message": "Crawling URL list"})
+    return rebuild_rag_from_urls(urls, state.config, embedder, progress_cb=_cb)
 
 
 def create_web_app(state: AppState, base_path: str) -> FastAPI:
@@ -475,9 +522,42 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             "selected_project": selected_project or "",
             "items_counts": items_counts or {"memory": 0, "doc": 0, "bug": 0, "todo": 0},
             "rebuild_running": state.rebuild_running,
+            "rebuild_progress": state.snapshot_rebuild_progress(),
             "needs_rebuild": state.config_dirty,
             "restart_required": state.restart_required,
         }
+
+    @app.get("/ui/api/rebuild/progress")
+    async def api_rebuild_progress():
+        return {"rebuild_running": state.rebuild_running, "progress": state.snapshot_rebuild_progress()}
+
+    @app.get("/ui/api/rebuild/events")
+    async def api_rebuild_events(request: Request):
+        from fastapi.responses import StreamingResponse
+
+        async def gen():
+            last_seq = None
+            last_running = None
+            keepalive_counter = 0
+
+            while True:
+                if await request.is_disconnected():
+                    return
+                snap = state.snapshot_rebuild_progress()
+                seq = snap.get("seq")
+                running = state.rebuild_running
+                if seq != last_seq or running != last_running:
+                    payload = {"rebuild_running": running, "progress": snap}
+                    yield f"data: {json.dumps(payload)}\n\n"
+                    last_seq = seq
+                    last_running = running
+                keepalive_counter += 1
+                if keepalive_counter >= 15:
+                    yield ": keepalive\n\n"
+                    keepalive_counter = 0
+                await asyncio.sleep(1.0)
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
 
     @app.get("/ui/api/tools")
     async def api_tools():
@@ -555,12 +635,17 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             if state.rebuild_running:
                 raise HTTPException(status_code=409, detail="A rebuild is already in progress.")
             state.rebuild_running = True
+            state.reset_rebuild_progress()
             try:
                 state.close_connection()
-                summary = await asyncio.to_thread(_run_rebuild_sitemap, url, state.config)
+                summary = await asyncio.to_thread(_run_rebuild_sitemap, url, state)
                 await refresh_retriever(state)
                 state.config_dirty = False
+                state.update_rebuild_progress({"stage": "done", "message": "Rebuild completed"})
                 return {"documents": summary.documents, "chunks": summary.chunks}
+            except Exception as exc:
+                state.update_rebuild_progress({"stage": "error", "error": str(exc), "message": "Rebuild failed"})
+                raise
             finally:
                 state.rebuild_running = False
 
@@ -573,12 +658,17 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             if state.rebuild_running:
                 raise HTTPException(status_code=409, detail="A rebuild is already in progress.")
             state.rebuild_running = True
+            state.reset_rebuild_progress()
             try:
                 state.close_connection()
-                summary = await asyncio.to_thread(_run_rebuild_urls_file, filename, state.config)
+                summary = await asyncio.to_thread(_run_rebuild_urls_file, filename, state)
                 await refresh_retriever(state)
                 state.config_dirty = False
+                state.update_rebuild_progress({"stage": "done", "message": "Rebuild completed"})
                 return {"documents": summary.documents, "chunks": summary.chunks}
+            except Exception as exc:
+                state.update_rebuild_progress({"stage": "error", "error": str(exc), "message": "Rebuild failed"})
+                raise
             finally:
                 state.rebuild_running = False
 
