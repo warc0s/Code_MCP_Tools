@@ -27,7 +27,7 @@ chunking:
   preserve_code_blocks: true
   respect_headings: true
 embeddings:
-  model_name: Qwen/Qwen3-Embedding-0.6B
+  model_name: voyageai/voyage-4-nano
   cloud_model_name: text-embedding-3-small
   normalize_embeddings: true
   query_prompt_name: query

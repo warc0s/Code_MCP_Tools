@@ -29,7 +29,7 @@ Servidor MCP + panel web orientado a **coding**: expone tools declarativas para 
 
 - Python 3.12
 - `pip install -r requirements.txt`
-- Conectividad inicial para extensiones DuckDB (`fts`, `vss`) y modelos Qwen.
+- Conectividad inicial para extensiones DuckDB (`fts`, `vss`) y modelos locales (`voyageai/voyage-4-nano`, `Qwen/Qwen3-Reranker-0.6B`).
 
 ## Uso rápido
 

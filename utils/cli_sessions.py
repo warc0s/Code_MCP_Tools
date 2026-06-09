@@ -271,6 +271,7 @@ class CLISession:
     eio_error: bool = False
     ring_discarded_bytes: int = 0
     killed_by_timeout: bool = False
+    process_group_created: bool = False
 
     def is_alive(self) -> bool:
         return self.process.isalive()
@@ -530,7 +531,7 @@ def _timeout_kill(session: CLISession, grace_sec: float = 2.0) -> None:
             pgid = os.getpgid(session.process.pid)
         except Exception:
             pgid = None
-        if pgid:
+        if pgid and session.process_group_created:
             os.killpg(pgid, signal.SIGTERM)
         else:
             try:
@@ -541,7 +542,7 @@ def _timeout_kill(session: CLISession, grace_sec: float = 2.0) -> None:
         while time.time() < deadline and session.is_alive():
             time.sleep(0.05)
         if session.is_alive():
-            if pgid:
+            if pgid and session.process_group_created:
                 os.killpg(pgid, signal.SIGKILL)
             else:
                 try:
@@ -554,7 +555,12 @@ def _timeout_kill(session: CLISession, grace_sec: float = 2.0) -> None:
         session.stop_event.set()
 
 
-def _drain_output_pull(session: CLISession, timeout: float, max_bytes: int) -> Tuple[str, bool]:
+def _drain_output_pull(
+    session: CLISession,
+    timeout: float,
+    max_bytes: int,
+    stop_on_first_data: bool = True,
+) -> Tuple[str, bool]:
     """
     Espera hasta `timeout` para acumular salida nueva en el ring buffer y devuelve
     hasta `max_bytes` del delta pendiente. Marca awaiting_input por heurística.
@@ -564,7 +570,7 @@ def _drain_output_pull(session: CLISession, timeout: float, max_bytes: int) -> T
     while time.time() < deadline:
         with session.lock:
             have_data = session.pending_bytes > 0
-        if have_data:
+        if have_data and stop_on_first_data:
             break
         # Si el proceso ya terminó y no hay datos, salir
         if not session.is_alive():
@@ -613,6 +619,8 @@ def _derive_termination(session: CLISession, tail_text: str) -> Tuple[str, Optio
     sig = _map_signal(getattr(session.process, "signalstatus", None))
     if _looks_like_eof_on_stdin(tail_text):
         return "EOF_on_stdin", exit_code, sig
+    if session.killed_by_timeout:
+        return "Timeout", exit_code, sig
     if sig is not None:
         return "Signaled", exit_code, sig
     if exit_code is not None:
@@ -672,21 +680,38 @@ def start_session(
 
     merged_env = _merge_env(env)
     try:
+        def _spawn(preexec_fn):
+            return pexpect.spawn(
+                exec_cmd,
+                args=cmd_args,
+                cwd=workdir or None,
+                env=merged_env,
+                encoding="utf-8",
+                echo=False,
+                preexec_fn=preexec_fn,
+            )
+
         # Crear nuevo grupo de procesos (POSIX) para señales al grupo
         preexec = None
         try:
             preexec = os.setsid
         except Exception:
             preexec = None
-        proc = pexpect.spawn(
-            exec_cmd,
-            args=cmd_args,
-            cwd=workdir or None,
-            env=merged_env,
-            encoding="utf-8",
-            echo=False,
-            preexec_fn=preexec,
-        )
+        process_group_created = preexec is not None
+        try:
+            proc = _spawn(preexec)
+        except PermissionError as exc:
+            exc_text = str(exc).lower()
+            is_eperm = (
+                exc.errno == errno.EPERM
+                or "[errno 1]" in exc_text
+                or "operation not permitted" in exc_text
+            )
+            if preexec is None or not is_eperm:
+                raise
+            # Some constrained runners deny setsid in the child process; retry without a process group.
+            proc = _spawn(None)
+            process_group_created = False
     except (pexpect.exceptions.ExceptionPexpect, OSError) as exc:
         error_hint = (
             "No se pudo lanzar el comando. Verifica el comando, revisa el entorno conda (usa solo letras/dígitos/_/-) "
@@ -705,6 +730,7 @@ def start_session(
         batch_queries=batch_queries,
         prompt_pattern=prompt_pattern,
         is_repl=_is_repl_command(cleaned),
+        process_group_created=process_group_created,
     )
     if ring_max_bytes and isinstance(ring_max_bytes, int) and ring_max_bytes > 0:
         session.max_buffer_bytes = int(ring_max_bytes)
@@ -721,7 +747,12 @@ def start_session(
             except Exception:
                 break
     # Esperar un poco y devolver delta acumulado
-    output, awaiting_input = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
+    output, awaiting_input = _drain_output_pull(
+        session,
+        timeout=timeout,
+        max_bytes=max_bytes,
+        stop_on_first_data=not bool(stdin_lines),
+    )
     alive = session.is_alive()
     if not alive:
         awaiting_input = False
@@ -916,6 +947,8 @@ def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict
             # Señales al grupo de procesos para asegurar cierre de hijos
             try:
                 pgid = os.getpgid(session.process.pid)
+                if not session.process_group_created:
+                    raise RuntimeError("Process group was not created for this session.")
                 if kill:
                     os.killpg(pgid, signal.SIGKILL)
                 else:

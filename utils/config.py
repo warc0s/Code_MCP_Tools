@@ -79,7 +79,7 @@ class ChunkingConfig:
 
 @dataclass(frozen=True)
 class EmbeddingConfig:
-    model_name: str = "Qwen/Qwen3-Embedding-0.6B"
+    model_name: str = "voyageai/voyage-4-nano"
     normalize_embeddings: bool = True
     query_prompt_name: Optional[str] = "query"
     embedding_dim: Optional[int] = None

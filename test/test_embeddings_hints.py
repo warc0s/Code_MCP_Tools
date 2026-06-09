@@ -43,9 +43,10 @@ def test_torchvision_mismatch_hint(monkeypatch):
 def test_device_auto_cuda_selection(monkeypatch):
     # Evita descargar modelos reales: stub de SentenceTransformer
     class FakeST:
-        def __init__(self, model_name, device=None):
+        def __init__(self, model_name, device=None, **kwargs):
             self.model_name = model_name
             self.device = device
+            self.kwargs = kwargs
 
         def get_sentence_embedding_dimension(self):
             return 10

@@ -13,6 +13,10 @@ from utils.config import EmbeddingConfig
 from utils.env import load_env_file
 
 DEFAULT_CLOUD_EMBED_MODEL = "text-embedding-3-small"
+DEFAULT_LOCAL_EMBED_MODEL = "voyageai/voyage-4-nano"
+VOYAGE_4_NANO_MODEL = "voyageai/voyage-4-nano"
+VOYAGE_4_NANO_DEFAULT_DIM = 1024
+VOYAGE_4_NANO_SUPPORTED_DIMS = {2048, 1024, 512, 256}
 
 
 class EmbeddingProvider:
@@ -30,11 +34,44 @@ class EmbeddingProvider:
         self._client = None
         self._embedding_dim: Optional[int] = config.embedding_dim
         self._device: Optional[str] = None  # 'cuda' si disponible; 'cpu' en otro caso
+        self._local_truncate_dim: Optional[int] = None
 
     def _load_sentence_transformer(self):
         from sentence_transformers import SentenceTransformer
 
         return SentenceTransformer
+
+    def _is_voyage_4_nano(self) -> bool:
+        return self.mode == "local" and self.model_name.strip().lower() == VOYAGE_4_NANO_MODEL
+
+    def _resolve_voyage_truncate_dim(self) -> int:
+        requested_dim = self.config.embedding_dim or VOYAGE_4_NANO_DEFAULT_DIM
+        if requested_dim not in VOYAGE_4_NANO_SUPPORTED_DIMS:
+            allowed = ", ".join(str(dim) for dim in sorted(VOYAGE_4_NANO_SUPPORTED_DIMS, reverse=True))
+            raise ValueError(
+                f"voyage-4-nano only supports embedding_dim values: {allowed}."
+            )
+        return int(requested_dim)
+
+    def _sentence_transformer_kwargs(self) -> dict:
+        if not self._is_voyage_4_nano():
+            return {}
+        self._local_truncate_dim = self._resolve_voyage_truncate_dim()
+        return {
+            "trust_remote_code": True,
+            "truncate_dim": self._local_truncate_dim,
+        }
+
+    def _vectors_to_lists(self, vectors) -> List[List[float]]:
+        if hasattr(vectors, "tolist"):
+            vectors = vectors.tolist()
+        if not isinstance(vectors, list):
+            vectors = list(vectors)
+        if not vectors:
+            return []
+        if all(isinstance(value, (int, float)) for value in vectors):
+            return [[float(value) for value in vectors]]
+        return [[float(value) for value in vector] for vector in vectors]
 
     @property
     def embedding_dim(self) -> int:
@@ -116,14 +153,22 @@ class EmbeddingProvider:
             device = "cpu"
         self._device = device
 
+        model_kwargs = self._sentence_transformer_kwargs()
         try:
-            self._model = SentenceTransformer(self.model_name, device=self._device)
+            self._model = SentenceTransformer(
+                self.model_name,
+                device=self._device,
+                **model_kwargs,
+            )
         except Exception as exc:
             raise RuntimeError(
                 f"No se pudo cargar el modelo de embeddings '{self.model_name}': {exc}"
             ) from exc
 
-        self._embedding_dim = int(self._model.get_sentence_embedding_dimension())
+        model_dim = self._model.get_sentence_embedding_dimension()
+        if model_dim is None and self._local_truncate_dim is not None:
+            model_dim = self._local_truncate_dim
+        self._embedding_dim = int(model_dim)
 
     @property
     def device(self) -> Optional[str]:
@@ -184,30 +229,42 @@ class EmbeddingProvider:
             return []
         if self.mode == "local":
             self._ensure_model_loaded()
-            vectors = self._model.encode(
-                payload,
-                normalize_embeddings=self.config.normalize_embeddings,
-                convert_to_numpy=True,
-            )
-            return vectors.tolist()
+            kwargs = {
+                "normalize_embeddings": self.config.normalize_embeddings,
+                "convert_to_numpy": True,
+            }
+            if self._is_voyage_4_nano() and hasattr(self._model, "encode_document"):
+                vectors = self._model.encode_document(payload, **kwargs)
+            else:
+                vectors = self._model.encode(payload, **kwargs)
+            return self._vectors_to_lists(vectors)
         return self._cloud_embed(payload)
 
     def embed_query(self, query: str) -> List[float]:
         if self.mode == "local":
             self._ensure_model_loaded()
-            kwargs = {}
+            kwargs = {
+                "normalize_embeddings": self.config.normalize_embeddings,
+                "convert_to_numpy": True,
+            }
+            if self._is_voyage_4_nano() and hasattr(self._model, "encode_query"):
+                vectors = self._model.encode_query(query, **kwargs)
+                as_lists = self._vectors_to_lists(vectors)
+                return as_lists[0] if as_lists else []
+
             if self.config.query_prompt_name:
                 kwargs["prompt_name"] = self.config.query_prompt_name
-            vector = self._model.encode(
-                [query],
-                normalize_embeddings=self.config.normalize_embeddings,
-                convert_to_numpy=True,
-                **kwargs,
-            )[0]
-            return vector.tolist()
+            vectors = self._model.encode([query], **kwargs)
+            as_lists = self._vectors_to_lists(vectors)
+            return as_lists[0] if as_lists else []
 
         vectors = self._cloud_embed([query])
         return vectors[0] if vectors else []
 
 
-__all__ = ["DEFAULT_CLOUD_EMBED_MODEL", "EmbeddingProvider"]
+__all__ = [
+    "DEFAULT_CLOUD_EMBED_MODEL",
+    "DEFAULT_LOCAL_EMBED_MODEL",
+    "EmbeddingProvider",
+    "VOYAGE_4_NANO_MODEL",
+]
