@@ -20,6 +20,7 @@ flowchart TD
     python_cli --> send[python_cli_send<br/>Send input + read]
     python_cli --> stop[python_cli_stop<br/>SIGINT/SIGTERM/SIGKILL]
     python_cli --> restart[python_cli_restart<br/>Restart with same config]
+    python_cli --> call[python_call_function<br/>Function call in subprocess]
 
     items --> store[store_item<br/>Crea memory/doc/bug/todo]
     items --> update[update_item<br/>Actualiza metadatos]
@@ -36,6 +37,7 @@ flowchart TD
 - `dense_search` / `lexical_search`: están presentes pero deshabilitados en `config.yaml` (actívalos con `mcp.tools` o sets).
 - Ámbito: el índice RAG es global (no por proyecto); las tools de Items operan por proyecto.
 - `python_cli_start`/`python_cli_send`/`python_cli_stop`/`python_cli_restart`: sesiones interactivas de Python (script o módulo); aceptan `conda_env`, `workdir`, `timeout`, y devuelven `status_hint`/`next_step`. `max_bytes` opcional limita el delta de salida por lectura (por defecto 16000). No ejecuta shell general.
+- `python_call_function`: llamada no interactiva a funciones de `utils.*`/`scripts.*` en subproceso con payload JSON y respuesta estructurada `ok/result/stdout/stderr/error_*`.
 - `store_item`/`update_item`/`get_item`/`list_items`/`search_items`/`patch_doc`/`delete_item`: gestión de items por proyecto (`project` o `project_id`). `typed` recoge campos obligatorios por tipo; `meta` es opcional para extras. `patch_doc` edita docs por diff unificado.
 
 ## Novedades UI relacionadas

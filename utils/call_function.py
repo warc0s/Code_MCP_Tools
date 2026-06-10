@@ -76,9 +76,21 @@ def call_python_function(
         executable = pyexec
         argv = ["-u", "-m", "utils.function_runner"]
     try:
+        input_payload = json.dumps(payload)
+    except (TypeError, ValueError) as exc:
+        return {
+            "ok": False,
+            "result": None,
+            "stdout": "",
+            "stderr": "",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "traceback": None,
+        }
+    try:
         proc = subprocess.run(
             [executable] + argv,
-            input=json.dumps(payload),
+            input=input_payload,
             text=True,
             capture_output=True,
             cwd=workdir_abs.as_posix(),
@@ -93,6 +105,16 @@ def call_python_function(
             "stderr": "",
             "error_type": "Timeout",
             "error_message": f"Function call exceeded {timeout_ms} ms",
+            "traceback": None,
+        }
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {
+            "ok": False,
+            "result": None,
+            "stdout": "",
+            "stderr": "",
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
             "traceback": None,
         }
     # If the runner failed to start at the OS level

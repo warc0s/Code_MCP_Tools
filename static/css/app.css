@@ -93,6 +93,12 @@
       transform: translateY(-1px);
     }
 
+    .input:focus-visible, select.input:focus-visible, textarea.input:focus-visible {
+      outline: 2px solid #3b82f6;
+      outline-offset: 2px;
+      border-color: #3b82f6;
+    }
+
     .input::placeholder {
       color: var(--text-quaternary);
     }

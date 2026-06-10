@@ -94,14 +94,14 @@
             <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
               Use these reminders to tailor your AGENTS.md before copying. Remove sections that don’t apply to your setup.
             </p>
-            <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px;">
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px;">
               <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
                 <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Context7 MCP</div>
                 <div style="font-size: 12px; color: var(--text-tertiary);">If you don’t use Context7, remove that section from the AGENTS.md copy.</div>
               </div>
               <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
                 <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Chrome DevTools (MCP)</div>
-                <div style="font-size: 12px; color: var(--text-tertiary);">If you won’t use the MCP Chrome DevTools integration, remove that section.</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If browser automation is not part of your setup, remove that integration note from the AGENTS.md copy.</div>
               </div>
               <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
                 <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Project name</div>
@@ -167,7 +167,7 @@
                 <textarea id="codex-config-snippet" class="input" readonly style="margin-top: 8px; height: 160px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">
 rmcp_client = true
 
-[mcp_servers.codeMCP_local]
+[mcp_servers.contextarium_local]
 url = "http://127.0.0.1:8000/mcp"
 startup_timeout_sec = 2
 tool_timeout_sec = 60
@@ -180,7 +180,7 @@ tool_timeout_sec = 60
                 <div class="card-title">Claude Code</div>
                 <div style="font-size:11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 6px;">Step 1</div>
                 <div style="margin-bottom: 6px; font-size: 13px; color: var(--text-secondary);">Add this MCP server as HTTP:</div>
-                <textarea id="claude-add-cmd" class="input" readonly style="margin-top: 4px; height: 80px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">claude mcp add --transport http code-mcp http://127.0.0.1:8000/mcp</textarea>
+                <textarea id="claude-add-cmd" class="input" readonly style="margin-top: 4px; height: 80px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">claude mcp add --transport http contextarium http://127.0.0.1:8000/mcp</textarea>
                 <div style="margin-top: 8px; display:flex; gap:8px; flex-wrap: wrap;">
                   <button class="ghost-btn" onclick="copyClaudeCommand()">Copy command</button>
                 </div>
@@ -200,7 +200,7 @@ tool_timeout_sec = 60
                 <div style="margin-bottom: 6px; font-size: 13px; color: var(--text-secondary);">Create <code>.vscode/mcp.json</code> in your project and paste:</div>
                 <textarea id="copilot-mcp-json" class="input" readonly style="margin-top: 4px; height: 160px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">{
   "servers": {
-    "code-mcp": {
+    "contextarium": {
       "type": "http",
       "url": "http://127.0.0.1:8000/mcp"
     }

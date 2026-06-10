@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import List, Literal, Optional, Union, Dict, Any
+from collections.abc import Mapping
+from typing import List, Literal, Optional, Dict, Any
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -71,17 +72,23 @@ def _format_validation_errors(e: ValidationError) -> str:
     return "; ".join(parts) or "invalid meta"
 
 
-def validate_meta(item_type: str, meta: Dict[str, Any]) -> Dict[str, Any]:
+def validate_meta(item_type: str, meta: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     t = (item_type or "").strip().lower()
+    if meta is None:
+        meta_dict: Dict[str, Any] = {}
+    elif isinstance(meta, Mapping):
+        meta_dict = dict(meta)
+    else:
+        raise ValueError(f"Invalid meta for '{t}': meta must be an object.")
     try:
         if t == "memory":
-            return MemoryMeta(**(meta or {})).model_dump()
+            return MemoryMeta(**meta_dict).model_dump()
         if t == "doc":
-            return DocMeta(**(meta or {})).model_dump()
+            return DocMeta(**meta_dict).model_dump()
         if t == "bug":
-            return BugMeta(**(meta or {})).model_dump()
+            return BugMeta(**meta_dict).model_dump()
         if t == "todo":
-            return TodoMeta(**(meta or {})).model_dump()
+            return TodoMeta(**meta_dict).model_dump()
     except ValidationError as e:
         detail = _format_validation_errors(e)
         raise ValueError(
@@ -147,7 +154,7 @@ def typed_json_schema(item_type: str, required: bool = True) -> Dict[str, Any]:
             "rationale": {"type": "string"},
             "related_links": {"type": "array", "items": {"type": "string"}},
         }
-        schema: Dict[str, Any] = {"type": "object", "properties": props}
+        schema: Dict[str, Any] = {"type": "object", "properties": props, "additionalProperties": False}
         if required:
             schema["required"] = ["topic", "decision", "context", "rationale"]
         return schema
@@ -156,7 +163,7 @@ def typed_json_schema(item_type: str, required: bool = True) -> Dict[str, Any]:
             "authors": {"type": "array", "items": {"type": "string"}},
             "related_docs": {"type": "array", "items": {"type": "string"}},
         }
-        return {"type": "object", "properties": props}
+        return {"type": "object", "properties": props, "additionalProperties": False}
     if t == "bug":
         props = {
             "severity": {"type": "string", "enum": ["high", "medium", "low"]},
@@ -164,7 +171,7 @@ def typed_json_schema(item_type: str, required: bool = True) -> Dict[str, Any]:
             "expected": {"type": "string"},
             "root_cause": {"type": "string"},
         }
-        schema = {"type": "object", "properties": props}
+        schema = {"type": "object", "properties": props, "additionalProperties": False}
         if required:
             schema["required"] = ["severity", "reproduction", "expected", "root_cause"]
         return schema
@@ -174,7 +181,7 @@ def typed_json_schema(item_type: str, required: bool = True) -> Dict[str, Any]:
             "acceptance_criteria": {"type": "array", "items": {"type": "string"}},
             "priority": {"type": "string", "enum": ["p0", "p1", "p2"]},
         }
-        schema = {"type": "object", "properties": props}
+        schema = {"type": "object", "properties": props, "additionalProperties": False}
         if required:
             schema["required"] = ["kind", "acceptance_criteria", "priority"]
         return schema
@@ -206,15 +213,10 @@ def meta_json_schema(item_type: str) -> Dict[str, Any]:
 
 
 def meta_json_schema_oneof() -> Dict[str, Any]:
-    # Combined oneOf schema used in MCP tool JSON Schema
-    return {
-        "oneOf": [
-            {"title": "memory", **MemoryMeta.model_json_schema() },
-            {"title": "doc", **DocMeta.model_json_schema() },
-            {"title": "bug", **BugMeta.model_json_schema() },
-            {"title": "todo", **TodoMeta.model_json_schema() },
-        ]
-    }
+    # The item type's allOf/if/then block narrows this to the concrete meta
+    # model. A top-level oneOf would be ambiguous because meta fields are mostly
+    # optional and allow extra keys.
+    return {"type": "object"}
 
 
 __all__ = [

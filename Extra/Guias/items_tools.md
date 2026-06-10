@@ -9,7 +9,7 @@ Nota de ámbito: las tools de Items operan por proyecto. El índice RAG es globa
 ## Tipos y convenciones
 - `memory`: decisiones, invariantes, mapas mentales, guías internas para el agente. Campos obligatorios pasan a `typed` (topic, decision, context, rationale); `meta` queda para extras opcionales.
 - `doc`: documentación markdown que antes viviría en `docs/`. Se versiona y se edita vía `patch_doc`. `typed` expone `authors` y `related_docs` (opcionales); el resto va en `meta` opcional.
-- `bug`: bug graveyard; campos obligatorios pasan a `typed` (`severity`, `reproduction`, `expected`, `root_cause`). `meta` se usa para extras (logs_excerpt, resolution_criteria, screenshots, related_files, done_summary, etc.).
+- `bug`: bug graveyard; campos obligatorios pasan a `typed` (`severity`, `reproduction`, `expected`, `root_cause`). `meta` se usa para extras (logs_excerpt, resolution_criteria, related_files, done_summary, etc.).
 - `todo`: tareas; campos obligatorios pasan a `typed` (`kind`, `acceptance_criteria`, `priority`). `meta` opcional para `dependencies`, `related_files`, `done_summary`, etc.
 - `tags` y `status` se normalizan en minúsculas; `status` solo admite `pending`, `in_progress`, `to_verify`, `resolved`. `project` puede ser slug o `project_id`. Nota: ya no se crean proyectos automáticamente.
 
@@ -27,7 +27,7 @@ Nota de ámbito: las tools de Items operan por proyecto. El índice RAG es globa
 - `POST /ui/api/projects { slug, name? }` → crea proyecto idempotente.
 - `DELETE /ui/api/projects/{slug}` → borra el proyecto y todos sus items. No se permite borrar el proyecto activo (`ui.selected_project`). La UI muestra confirmaciones en inglés explicando el impacto antes de proceder.
 
-Nota avanzada: DuckDB no soporta `ON DELETE CASCADE`. El backend realiza el borrado en dos fases (transacciones separadas): primero elimina los `items` del proyecto y luego el propio `project`, garantizando consistencia sin desactivar FKs.
+Nota avanzada: el backend mantiene las FKs activas y borra proyectos en una única transacción SQLite (`items` del proyecto y después `project`). El borrado concurrente de un mismo proyecto no reporta doble éxito: una llamada elimina y la otra recibe “Project not found”.
 
 Notas:
 - Usa siempre `project` o `project_id` (al menos uno) en cada tool. Si el proyecto no existe, las tools devolverán error de "Project not found"; créalo primero desde la UI (Projects) o mediante el endpoint `/ui/api/projects`.

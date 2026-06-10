@@ -8,7 +8,7 @@ Esta guía resume cómo conectar este servidor MCP con herramientas de coding. T
 ```toml
 rmcp_client = true
 
-[mcp_servers.codeMCP_local]
+[mcp_servers.contextarium_local]
 url = "http://127.0.0.1:8000/mcp"
 startup_timeout_sec = 2
 tool_timeout_sec = 60
@@ -20,7 +20,7 @@ Ajusta `url` y timeouts según tu entorno.
 Añade el servidor MCP HTTP:
 
 ```bash
-claude mcp add --transport http code-mcp http://127.0.0.1:8000/mcp
+claude mcp add --transport http contextarium http://127.0.0.1:8000/mcp
 ```
 
 Verifica con:
@@ -37,7 +37,7 @@ Configura el servidor vía archivo del proyecto:
 ```json
 {
   "servers": {
-    "code-mcp": {
+    "contextarium": {
       "type": "http",
       "url": "http://127.0.0.1:8000/mcp"
     }
@@ -46,4 +46,3 @@ Configura el servidor vía archivo del proyecto:
 ```
 
 Guarda como `.vscode/mcp.json` y usa “MCP: List Servers” en la paleta de comandos para verificar.
-

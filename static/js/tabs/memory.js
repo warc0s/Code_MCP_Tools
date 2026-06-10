@@ -1,5 +1,5 @@
 import { boardStatuses, getCurrentProject, setCurrentProject, setCurrentItemType, getCurrentItemType } from '../core/state.js';
-import { parseJsonSafe, parseTags, escapeHtml } from '../core/utils.js';
+import { parseJsonSafe, parseTags, escapeHtml, isValidUrl } from '../core/utils.js';
 import { createItem as apiCreateItem, listItems, updateItem, replaceItemBody, deleteItem as apiDeleteItem } from '../core/api.js';
 import { showToast } from '../core/toast.js';
 import { log } from '../core/logger.js';
@@ -462,7 +462,7 @@ async function saveInlineEdit(editorEl, item) {
       const res = await updateItem(project, item.id, fields);
       item = res.item || item;
     }
-    if (typeof newBody === 'string') {
+    if (typeof newBody === 'string' && newBody !== (item.body_md || '')) {
       await replaceItemBody(project, item.id, newBody, item.version);
     }
     showToast('Item saved', 'success');
@@ -606,6 +606,8 @@ function hasValidResolutionMeta(meta) {
 
 function showResolveModal(item) {
   return new Promise((resolve) => {
+    const doneSummary = escapeHtml(item.meta?.done_summary || '');
+    const relatedFiles = escapeHtml((item.meta?.related_files || []).join(', '));
     const overlay = document.createElement('div');
     overlay.style.cssText = 'position:fixed; inset:0; background:rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000;';
     const box = document.createElement('div');
@@ -615,11 +617,11 @@ function showResolveModal(item) {
       <div style="font-size:12px; color:var(--text-secondary); margin-bottom:8px;">When resolving, add a short summary and the files touched.</div>
       <div>
         <label class="label">Done summary (>= 120 chars)</label>
-        <textarea id="rs-done" class="input" style="height:120px;">${(item.meta?.done_summary || '').replace(/</g,'&lt;')}</textarea>
+        <textarea id="rs-done" class="input" style="height:120px;">${doneSummary}</textarea>
       </div>
       <div style="margin-top:8px;">
         <label class="label">Related files (comma-separated)</label>
-        <input id="rs-files" class="input" value="${(item.meta?.related_files || []).join(', ').replace(/</g,'&lt;')}">
+        <input id="rs-files" class="input" value="${relatedFiles}">
       </div>
       <div style="display:flex; gap:8px; margin-top:12px;">
         <button id="rs-ok" class="primary-btn" style="flex:1;">Save and resolve</button>
@@ -700,7 +702,7 @@ function openItemModal(item) {
     return row;
   };
   const esc = (s) => escapeHtml(String(s ?? ''));
-  const list = (arr) => (arr || []).length ? '<ul style="margin:0; padding-left: 18px;">' + (arr||[]).map((x)=>`<li style="margin:2px 0;">${esc(x)}</li>`).join('') + '</ul>' : '-';
+  const list = (arr) => Array.isArray(arr) && arr.length ? '<ul style="margin:0; padding-left: 18px;">' + arr.map((x)=>`<li style="margin:2px 0;">${esc(x)}</li>`).join('') + '</ul>' : '-';
 
   // Basic
   body.appendChild(metaRow('Type', esc(item.type || '')));
@@ -737,7 +739,12 @@ function openItemModal(item) {
   if (m.logs_excerpt) body.appendChild(metaRow('Logs', `<div style="white-space:pre-wrap;">${esc(m.logs_excerpt)}</div>`));
   if (m.resolution_criteria) body.appendChild(metaRow('Criteria', list(m.resolution_criteria)));
   if (m.screenshots) {
-    const links = (m.screenshots||[]).map((u)=>`<a href="${esc(u)}" target="_blank" rel="noreferrer" style="color:#3b82f6; text-decoration:none;">${esc(u)}</a>`);
+    const screenshots = Array.isArray(m.screenshots) ? m.screenshots : [];
+    const links = screenshots.map((u) => {
+      const url = String(u || '');
+      if (!isValidUrl(url)) return esc(url);
+      return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer" style="color:#3b82f6; text-decoration:none;">${esc(url)}</a>`;
+    });
     body.appendChild(metaRow('Screenshots', links.length ? links.join('<br/>') : '-'));
   }
 

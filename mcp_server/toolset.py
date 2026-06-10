@@ -8,6 +8,8 @@ import logging
 from dataclasses import asdict
 from typing import Any, Dict, Iterable, List, Optional
 
+from jsonschema import Draft202012Validator
+
 from utils.cli_sessions import restart_session, send_input, start_session, stop_session
 from utils.call_function import call_python_function
 import re as _re
@@ -37,6 +39,42 @@ def _is_under_root(candidate: _Path, root: _Path) -> bool:
             return True
         except ValueError:
             return False
+
+
+def _json_type_name(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "boolean"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "integer"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    if isinstance(value, list):
+        return "array"
+    if isinstance(value, dict):
+        return "object"
+    return type(value).__name__
+
+
+def _ensure_json_serializable(value: Any, path: str = "arguments") -> None:
+    if value is None or isinstance(value, (str, bool)):
+        return
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _ensure_json_serializable(item, f"{path}[{index}]")
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str):
+                raise ValueError(f"{path} contains a non-string object key: {key!r}.")
+            _ensure_json_serializable(item, f"{path}.{key}")
+        return
+    raise ValueError(f"{path} contains a non-JSON value of type {_json_type_name(value)}.")
 
 
 SEARCH_RESULT_ITEM_SCHEMA: Dict[str, Any] = {
@@ -529,15 +567,9 @@ class RAGToolset:
         if enabled_tools is not None:
             enabled_set = {name for name in enabled_tools if name in all_tools}
             disabled = {name for name in all_tools.keys() if name not in enabled_set}
-            if not enabled_set:
-                logger.warning(
-                    "Configuración MCP sin tools válidas; se mantendrán todas las tools por defecto."
-                )
-                self._tools = all_tools
-            else:
-                if disabled:
-                    logger.info("Tools MCP deshabilitadas por configuración: %s", ", ".join(sorted(disabled)))
-                self._tools = {name: all_tools[name] for name in sorted(enabled_set)}
+            if disabled:
+                logger.info("Tools MCP deshabilitadas por configuración: %s", ", ".join(sorted(disabled)))
+            self._tools = {name: all_tools[name] for name in sorted(enabled_set)}
         else:
             self._tools = all_tools
         self._all_tools = all_tools
@@ -547,14 +579,11 @@ class RAGToolset:
 
     def set_enabled_tools(self, enabled_tools: Iterable[str]) -> None:
         enabled_set = {name for name in enabled_tools if name in self._all_tools}
-        if not enabled_set:
-            logger.warning("Petición de actualización sin tools válidas; se mantienen las actuales.")
-            return
         self._tools = {name: self._all_tools[name] for name in sorted(enabled_set)}
         disabled = set(self._all_tools.keys()) - enabled_set
         if disabled:
             logger.info("Tools deshabilitadas: %s", ", ".join(sorted(disabled)))
-        logger.info("Tools habilitadas: %s", ", ".join(sorted(enabled_set)))
+        logger.info("Tools habilitadas: %s", ", ".join(sorted(enabled_set)) or "(none)")
 
     def update_retriever(self, retriever) -> None:
         self.retriever = retriever
@@ -568,45 +597,12 @@ class RAGToolset:
     def _validate(self, schema: Dict[str, Any], payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
             raise ValueError("Los argumentos de la tool deben ser un objeto.")
-        required = schema.get("required", [])
-        for field in required:
-            if field not in payload:
-                raise ValueError(f"Falta el parámetro obligatorio '{field}'.")
-        properties = schema.get("properties", {})
-        for key, value in payload.items():
-            prop = properties.get(key)
-            if not prop:
-                continue
-            expected_type = prop.get("type")
-            if expected_type == "string" and not isinstance(value, str):
-                raise ValueError(f"'{key}' debe ser una cadena.")
-            if expected_type == "integer":
-                if not isinstance(value, int):
-                    raise ValueError(f"'{key}' debe ser un entero.")
-                minimum = prop.get("minimum")
-                if minimum is not None and value < minimum:
-                    raise ValueError(f"'{key}' debe ser >= {minimum}.")
-            if expected_type == "number":
-                if not isinstance(value, (int, float)):
-                    raise ValueError(f"'{key}' debe ser numérico.")
-                minimum = prop.get("minimum")
-                if minimum is not None and float(value) < float(minimum):
-                    raise ValueError(f"'{key}' debe ser >= {minimum}.")
-            if expected_type == "boolean" and not isinstance(value, bool):
-                raise ValueError(f"'{key}' debe ser booleano.")
-            if expected_type == "object" and not isinstance(value, dict):
-                raise ValueError(f"'{key}' debe ser un objeto.")
-            if expected_type == "array":
-                if not isinstance(value, list):
-                    raise ValueError(f"'{key}' debe ser una lista.")
-                item_type = prop.get("items", {}).get("type")
-                if item_type:
-                    for item in value:
-                        if item_type == "string" and not isinstance(item, str):
-                            raise ValueError(f"Cada elemento de '{key}' debe ser cadena.")
-            enum_values = prop.get("enum")
-            if enum_values and value not in enum_values:
-                raise ValueError(f"'{key}' debe ser uno de: {', '.join(enum_values)}.")
+        validator = Draft202012Validator(schema)
+        errors = sorted(validator.iter_errors(payload), key=lambda err: list(err.path))
+        if errors:
+            first = errors[0]
+            path = ".".join(str(part) for part in first.path) or "(root)"
+            raise ValueError(f"Argumentos inválidos en {path}: {first.message}.")
 
     def _build_python_command(self, payload: Dict[str, Any]) -> str:
         """Build and validate a Python-only command string.
@@ -767,6 +763,8 @@ class RAGToolset:
                 workdir_abs = (repo_root / workdir_arg).resolve()
                 if not _is_under_root(workdir_abs, repo_root):
                     raise ValueError("workdir outside repository.")
+                _ensure_json_serializable(payload.get("args") or [], "args")
+                _ensure_json_serializable(payload.get("kwargs") or {}, "kwargs")
                 results = call_python_function(
                     module=module_name,
                     function=func_name,

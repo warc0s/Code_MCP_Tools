@@ -274,7 +274,10 @@ class CLISession:
     process_group_created: bool = False
 
     def is_alive(self) -> bool:
-        return self.process.isalive()
+        try:
+            return self.process.isalive()
+        except (pexpect.ExceptionPexpect, OSError):
+            return False
 
     def append_log(self, text: str) -> None:
         if not self.log_enabled:
@@ -398,6 +401,28 @@ def _start_reader_thread(session: CLISession) -> None:
     t.start()
 
 
+def _is_under_root(candidate: Path, root: Path) -> bool:
+    try:
+        return candidate.is_relative_to(root)
+    except AttributeError:
+        try:
+            candidate.relative_to(root)
+            return True
+        except ValueError:
+            return False
+
+
+def _resolve_workdir(workdir: Optional[str]) -> Optional[str]:
+    if not workdir:
+        return None
+    repo_root = Path.cwd().resolve()
+    candidate = Path(workdir)
+    resolved = candidate.resolve() if candidate.is_absolute() else (repo_root / candidate).resolve()
+    if not _is_under_root(resolved, repo_root):
+        raise ValueError("workdir outside repository.")
+    return str(resolved)
+
+
 def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]:
     """
     Asegura que la ruta del script (si aplica) sea absoluta y exista.
@@ -429,9 +454,13 @@ def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]
         Path(workdir) / script_candidate if workdir else None,
         Path.cwd() / script_candidate,
     ]
+    repo_root = Path.cwd().resolve()
     for candidate in candidates:
         if candidate and candidate.is_file():
-            tokens[script_index] = str(candidate.resolve())
+            resolved = candidate.resolve()
+            if not _is_under_root(resolved, repo_root):
+                raise ValueError("Script outside repository.")
+            tokens[script_index] = str(resolved)
             return tokens
 
     raise FileNotFoundError(
@@ -668,8 +697,9 @@ def start_session(
         ) from exc
 
     # Siempre spawn directo para permitir stdin_lines sin shell
+    resolved_workdir = _resolve_workdir(workdir)
     exec_cmd, cmd_args = _prepare_command(
-        cleaned, conda_env=conda_env, workdir=workdir, batch_queries=None
+        cleaned, conda_env=conda_env, workdir=resolved_workdir, batch_queries=None
     )
 
     session_id = str(uuid.uuid4())
@@ -684,7 +714,7 @@ def start_session(
             return pexpect.spawn(
                 exec_cmd,
                 args=cmd_args,
-                cwd=workdir or None,
+                cwd=resolved_workdir,
                 env=merged_env,
                 encoding="utf-8",
                 echo=False,
@@ -722,7 +752,7 @@ def start_session(
         session_id=session_id,
         command=cleaned,
         conda_env=conda_env,
-        workdir=workdir,
+        workdir=resolved_workdir,
         env=merged_env,
         process=proc,
         logfile_path=log_path,
@@ -797,11 +827,14 @@ def send_input(
     # Enforce lifetime/idle timeouts before interacting
     now = time.time()
     idle_anchor = session.last_send_ts or session.created_at
-    if (
+    expired = (
         (now - session.created_at) > DEFAULT_SESSION_LIFETIME_SEC
         or (now - idle_anchor) > DEFAULT_IDLE_TIMEOUT_SEC
-    ) and session.is_alive():
-        _timeout_kill(session)
+    )
+    if expired:
+        session.killed_by_timeout = True
+        if session.is_alive():
+            _timeout_kill(session)
     if not session.is_alive():
         output, _ = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
         term_reason, exit_code, sig = _derive_termination(session, output)
@@ -873,11 +906,14 @@ def send_lines(
     # Enforce timeouts first
     now = time.time()
     idle_anchor = session.last_send_ts or session.created_at
-    if (
+    expired = (
         (now - session.created_at) > DEFAULT_SESSION_LIFETIME_SEC
         or (now - idle_anchor) > DEFAULT_IDLE_TIMEOUT_SEC
-    ) and session.is_alive():
-        _timeout_kill(session)
+    )
+    if expired:
+        session.killed_by_timeout = True
+        if session.is_alive():
+            _timeout_kill(session)
     if not session.is_alive():
         output, _ = _drain_output_pull(session, timeout=timeout, max_bytes=max_bytes)
         term_reason, exit_code, sig = _derive_termination(session, output)
@@ -1026,7 +1062,20 @@ def restart_session(
     original_env = session.env
     original_batch = session.batch_queries
     original_prompt = session.prompt_pattern
-    stop_session(session_id, kill=False, drop=True)
+    stop_result = stop_session(session_id, kill=False, drop=False)
+    session_after_stop = SESSIONS.get(session_id)
+    still_alive = bool(stop_result.get("alive")) or bool(
+        session_after_stop and session_after_stop.is_alive()
+    )
+    if still_alive:
+        stop_result = stop_session(session_id, kill=True, drop=False)
+        session_after_stop = SESSIONS.get(session_id)
+        still_alive = bool(stop_result.get("alive")) or bool(
+            session_after_stop and session_after_stop.is_alive()
+        )
+    if still_alive:
+        raise RuntimeError("Could not stop previous Python session before restart.")
+    SESSIONS.pop(session_id, None)
     return start_session(
         command=original_command,
         conda_env=original_conda,

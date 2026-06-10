@@ -7,7 +7,7 @@
 - `python_cli_start(mode, script_path/module_name, args, python_opts, conda_env, workdir, timeout, max_bytes, high_scrollback, stdin_lines)`: inicia una sesión Python (script, módulo o `module_repl`). Puedes preinyectar entradas con `stdin_lines` (una línea por entrada). No ejecuta shell general.
 - `python_cli_send(session_id, text?, stdin_lines?, timeout=1.5, max_bytes=16000)`: envía una línea (`text`) o varias (`stdin_lines`) y devuelve la salida nueva (delta). `text` es opcional.
 - `python_cli_stop(session_id, kill=False)`: interrupción suave (Ctrl+C) y señales al grupo; si `kill=True`, SIGKILL.
-- `python_cli_restart(session_id, timeout=1.5)`: detiene y relanza usando la misma configuración.
+- `python_cli_restart(session_id, timeout=1.5)`: detiene y relanza usando la misma configuración. Primero intenta parada suave; si el proceso sigue vivo escala a `kill=True` y aborta el restart si aun así no puede confirmar la terminación.
 
 ## Configuración
 Activa/desactiva cada tool en `config.yaml`:

@@ -17,6 +17,30 @@ DEFAULT_LOCAL_EMBED_MODEL = "voyageai/voyage-4-nano"
 VOYAGE_4_NANO_MODEL = "voyageai/voyage-4-nano"
 VOYAGE_4_NANO_DEFAULT_DIM = 1024
 VOYAGE_4_NANO_SUPPORTED_DIMS = {2048, 1024, 512, 256}
+DEFAULT_OPENAI_TIMEOUT_SEC = 45.0
+DEFAULT_OPENAI_MAX_RETRIES = 2
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except ValueError:
+        return default
+    return value if value >= 0 else default
 
 
 class EmbeddingProvider:
@@ -191,7 +215,11 @@ class EmbeddingProvider:
                 "El paquete 'openai' es obligatorio para usar el modo cloud. Añádelo a requirements.txt."
             ) from exc
 
-        self._client = OpenAI(api_key=api_key)
+        self._client = OpenAI(
+            api_key=api_key,
+            timeout=_env_float("OPENAI_TIMEOUT_SEC", DEFAULT_OPENAI_TIMEOUT_SEC),
+            max_retries=_env_int("OPENAI_MAX_RETRIES", DEFAULT_OPENAI_MAX_RETRIES),
+        )
 
     def _normalize_vector(self, vector: List[float]) -> List[float]:
         if not self.config.normalize_embeddings:
@@ -265,6 +293,8 @@ class EmbeddingProvider:
 __all__ = [
     "DEFAULT_CLOUD_EMBED_MODEL",
     "DEFAULT_LOCAL_EMBED_MODEL",
+    "DEFAULT_OPENAI_MAX_RETRIES",
+    "DEFAULT_OPENAI_TIMEOUT_SEC",
     "EmbeddingProvider",
     "VOYAGE_4_NANO_MODEL",
 ]

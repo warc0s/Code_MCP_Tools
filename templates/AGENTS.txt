@@ -1,7 +1,7 @@
 # Repository Guidelines
 
 ## Flujo de trabajo
-- Antes de aplicar cualquier cambio, revisa el contexto relacionado y verifica manualmente los flujos afectados para detectar regresiones.
+- Antes de aplicar cualquier cambio, revisa el contexto relacionado y los flujos afectados para detectar regresiones.
 
 ## Engineering Principles
 - **Work doggedly.** Mantén autonomía mientras haya progreso; si paras, explica por qué.
@@ -12,10 +12,7 @@
 
 ## Validación y pruebas
 - Por cada funcionalidad nueva añade un test en `test/` y ejecútalo con `pytest`.
-- Validación dual obligatoria: además de `pytest`, lanza un navegador real vía MCP Chrome DevTools y recorre los flujos tocados (UI). No des por concluido el trabajo hasta tener verde en pruebas y verificación manual en Chrome.
-- Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest → UI con DevTools) hasta conseguir estabilidad.
-- Usa las checklists opcionales (pytest/UI/Context7/MCP externos) desde Dashboard → AGENTS.md para adaptar el alcance de validación según el cambio.
-- Si detectas un bug, captura siempre que sea posible logs y/o una screenshot en PNG: ver más abajo (Memoria operativa) para campos y cómo guardar la imagen.
+- Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest) hasta conseguir estabilidad.
 
 ## Coding Style & Naming Conventions
 - Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
@@ -68,32 +65,26 @@
 - `doc`: manuales o flujos largos (arquitectura, APIs, protocolos, pasos de despliegue), ejemplos reproducibles, listas de comandos; edita con `patch_doc` (diffs) para mantener historia limpia.
 - `bug`: incidencias reproducibles o P0 sospechados; documenta entorno, pasos exactos y comportamiento esperado/observado; añade meta con:
   - `severity` (`high|medium|low`), `reproduction` (pasos exactos), `expected`, `root_cause`
-  - opcionales: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (lista), `screenshots` (lista de URLs), `related_files` (lista)
-  - MUY recomendado añadir logs y/o una screenshot (PNG) cuando sea posible
+  - opcionales: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (lista), `related_files` (lista)
 - `todo`: tareas accionables; meta con `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (lista), `dependencies` (lista), `priority` (`p0|p1|p2`). Divide si la tarea crece.
   - opcional: `related_files` (lista de rutas/URLs)
 
 ### Campos meta sugeridos (validados)
 - `memory` (meta): `topic`, `decision`, `context`, `rationale`, `related_links` ([])
 - `doc` (meta): `authors` ([]), `source_url`, `related_docs` ([]), `version_notes`
-- `bug` (meta): ver lista anterior (logs y screenshots opcionales, pero recomendados)
+- `bug` (meta): ver lista anterior
 - `todo` (meta): ver lista anterior
-
-### Screenshots y logs (recomendación)
-- Screenshot (PNG) local para bugs: guarda el archivo dentro del repositorio, por ejemplo en `static/uploads/bugs/<slug>.png`.
-- Sirve la imagen desde la app en `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png` y añade esa URL a `meta.screenshots`.
-- Puedes tomar la captura con MCP Chrome DevTools (viewport) y guardarla como PNG en esa ruta; si no procede captura, adjunta al menos `logs_excerpt` y describe los pasos de reproducción.
 
 ### Cuándo crear o actualizar
 - Crea `memory` cuando tomes una decisión estructural, detectes un pitfall recurrente o acuerdes un invariante (p.ej., “no usar llm X sin cache”, “todas las rutas pasan por middleware Y”). Refresca o fusiona si hay duplicados; mantén corto y accionable.
 - Pasa a `doc` si el cuerpo excede lo recordable de un vistazo o requiere pasos secuenciales; actualiza tras cada cambio de flujo o dependencia (DB, índices, variables de entorno, comandos de rebuild).
-- Abre `bug` al reproducir o ver síntoma grave; añade captura de logs/inputs y versión del entorno; mueve a `to_verify` solo tras test automatizado + manual. Cierra con fix y verificación explícita.
+- Abre `bug` al reproducir o ver síntoma grave; añade logs/inputs y versión del entorno; mueve a `to_verify` solo tras una comprobación reproducible. Cierra con fix y verificación explícita.
 - Usa `todo` para la ejecución: desglosa en subtareas si bloquea; actualiza estados (`pending` → `in_progress` → `to_verify` → `resolved`) según validaciones reales.
 
 ### Guardado y edición eficaz
 - Prioriza `memory` para decisiones rápidas que guíen al agente en la próxima acción; si se vuelve un proceso, promuévelo a `doc` y enlaza.
 - Cada `doc` debe enlazar a `memory` o `bug` relevantes para contexto cruzado; incluye comandos concretos y checks esperados.
-- En `bug`, captura “cómo lo rompí” (input exacto, dataset, flags) y “por qué importa” (impacto usuario/índice); al fijar, añade “cómo lo comprobé”.
+- En `bug`, documenta “cómo lo rompí” (input exacto, dataset, flags) y “por qué importa” (impacto usuario/índice); al fijar, añade “cómo lo comprobé”.
 - En `todo`, guarda criterios de aceptación verificables y dependencias; evita tareas ambiguas.
 
 ## Tools MCP rápidas

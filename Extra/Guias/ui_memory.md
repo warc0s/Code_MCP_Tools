@@ -42,6 +42,7 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 - En Todo y Bugs, el drag-and-drop entre columnas cambia el `status`.
   - Al mover a `Resolved`, si faltan `meta.done_summary` (≥120 chars) o `meta.related_files` (al menos uno), la UI solicita esos datos en un modal y los guarda junto al cambio de estado.
   - También desde el editor inline: si cambias `Status` a `Resolved` y faltan esos campos, se abre el mismo modal antes de guardar.
+  - Los valores preexistentes que se precargan en ese modal se escapan antes de insertarlos en HTML, incluyendo comillas y ampersands, para evitar roturas de atributos o inyección accidental.
 
 ## Qué desaparece
 - Bloque de “Project selection” dentro de Memory (ahora en Settings).
@@ -76,7 +77,7 @@ ui:
 - Cada tarjeta incluye un botón `Show` que abre un modal de solo lectura con el detalle completo del item:
   - Datos básicos (tipo, versión, estado, tags)
   - Campos `typed` por tipo (p. ej., bug: severity, expected, reproduction, root_cause)
-  - Extras en `meta` cuando existan (done_summary, related_files, logs_excerpt, screenshots, criteria)
+  - Extras en `meta` cuando existan (done_summary, related_files, logs_excerpt, criteria)
   - Body completo si existe
 
 ### Campos sugeridos por tipo (Meta JSON)
@@ -88,7 +89,6 @@ ui:
   - root_cause (causa raíz)
   - done_summary (resumen de implementación al resolver, ≥120 chars)
   - resolution_criteria (lista de checks para darlo por resuelto)
-  - screenshots (lista de URLs, opcional)
   - related_files (lista de rutas/URLs, opcional)
 - todo:
   - kind (bug_fix|refactor|feature|chore)
@@ -103,10 +103,7 @@ ui:
 - El backend valida `meta` con modelos Pydantic específicos por tipo. Si faltan campos obligatorios o hay valores inválidos, devuelve un error detallado (campos faltantes, valores inválidos) para corregir rápidamente.
 - Las tools MCP `store_item` y `update_item` exponen en su JSON Schema un `oneOf` con el esquema de `meta` para cada tipo (memory/doc/bug/todo).
 
-## Screenshots y logs
-- Toma capturas con MCP Chrome DevTools (viewport) y guárdalas en `static/uploads/bugs/<slug>.png`. `.gitignore` excluye los archivos de `static/uploads/*`.
-- En `bug.meta.screenshots` añade la URL servida por la app: `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png`.
-- Si no procede captura, pega al menos `logs_excerpt` y describe los pasos exactos en `reproduction`.
+## Campos meta auxiliares
 - doc:
   - authors ([])
   - source_url
@@ -118,12 +115,5 @@ ui:
   - context
   - rationale
   - related_links ([])
-
-## Validación manual
-- Settings: guardar proyecto y ver el pill del header actualizado.
-- Memory:
-  - Crear item en cada subtipo.
-  - Listar y editar inline.
-  - En Todo: mover tarjetas entre columnas y editar con ✎.
 
 Si algo no responde como esperas, dime el caso concreto y lo ajusto.

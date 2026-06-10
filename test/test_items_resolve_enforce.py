@@ -27,14 +27,14 @@ def test_resolving_requires_done_summary_and_related_files(itype: str):
     cfg = _make_db()
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
-    svc.create_project("p1")
+    svc.create_project("p01")
     # Create with minimal valid meta for each type
     base_meta = {
         "bug": {"severity": "low", "reproduction": "steps", "expected": "ok", "root_cause": "rc"},
         "todo": {"kind": "feature", "acceptance_criteria": ["a"], "dependencies": [], "priority": "p2"},
     }[itype]
     item = svc.store_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_type=itype,
         title=f"Item {itype}",
@@ -46,12 +46,12 @@ def test_resolving_requires_done_summary_and_related_files(itype: str):
 
     # Attempt to resolve without required fields should fail
     with pytest.raises(Exception):
-        svc.update_item(project="p1", project_id=None, item_id=item.id, fields={"status": "resolved"})
+        svc.update_item(project="p01", project_id=None, item_id=item.id, fields={"status": "resolved"})
 
     # Provide done_summary but no files: still fail
     with pytest.raises(Exception):
         svc.update_item(
-            project="p1",
+            project="p01",
             project_id=None,
             item_id=item.id,
             fields={"status": "resolved", "meta": {**item.meta, "done_summary": _long_text() }},
@@ -59,7 +59,7 @@ def test_resolving_requires_done_summary_and_related_files(itype: str):
 
     # Provide both done_summary and related_files: succeeds
     updated = svc.update_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_id=item.id,
         fields={
@@ -68,4 +68,3 @@ def test_resolving_requires_done_summary_and_related_files(itype: str):
         },
     )
     assert updated.status == "resolved"
-

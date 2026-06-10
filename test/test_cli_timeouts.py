@@ -9,7 +9,9 @@ import pytest
 
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from utils.cli_sessions import start_session, send_input, SESSIONS
+import pexpect
+
+from utils.cli_sessions import CLISession, start_session, send_input, SESSIONS
 
 
 def _require_pty():
@@ -44,3 +46,21 @@ def test_timeout_enforced_on_idle_and_lifetime():
         except Exception:
             pass
 
+
+def test_session_is_alive_treats_pexpect_race_as_dead(tmp_path):
+    class BrokenProcess:
+        def isalive(self):
+            raise pexpect.ExceptionPexpect("no child process")
+
+    session = CLISession(
+        session_id="race",
+        command="python",
+        conda_env=None,
+        workdir=None,
+        env={},
+        process=BrokenProcess(),
+        logfile_path=tmp_path / "cli.log",
+        log_enabled=False,
+    )
+
+    assert session.is_alive() is False

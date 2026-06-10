@@ -17,6 +17,9 @@ from utils.item_meta import validate_meta, validate_typed_required
 
 ALLOWED_ITEM_TYPES = {"memory", "doc", "bug", "todo"}
 ALLOWED_STATUSES = {"pending", "in_progress", "to_verify", "resolved"}
+RESERVED_PROJECT_SLUGS = {
+    "api", "ui", "mcp", "docs", "items", "projects", "status", "settings", "rebuild", "log"
+}
 
 
 @dataclass
@@ -68,7 +71,19 @@ def _validate_status(status: Optional[str]) -> Optional[str]:
 
 def _slugify(value: str) -> str:
     cleaned = re.sub(r"[^a-zA-Z0-9-]+", "-", value.strip().lower()).strip("-")
-    return cleaned or uuid.uuid4().hex
+    cleaned = re.sub(r"--+", "-", cleaned)
+    return cleaned
+
+
+def normalize_project_slug(value: str) -> str:
+    slug = _slugify(value or "")
+    if not slug:
+        raise ValueError("You must provide a valid project slug.")
+    if slug in RESERVED_PROJECT_SLUGS:
+        raise ValueError(f"Reserved project slug: '{slug}'. Choose a different one.")
+    if len(slug) < 3 or len(slug) > 64:
+        raise ValueError("Project slug must be between 3 and 64 characters.")
+    return slug
 
 
 def _parse_json(value: Any, default):
@@ -154,10 +169,15 @@ class ItemService:
         self.db_path = db_config.path
 
     def _connect(self, read_only: bool = False):
-        # Always open read_write for simplicity; enforce foreign keys.
-        conn = sqlite3.connect(self.db_path.as_posix())
+        db_path = self.db_path
+        if read_only:
+            conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+        else:
+            db_path.parent.mkdir(parents=True, exist_ok=True)
+            conn = sqlite3.connect(db_path.as_posix())
         try:
             conn.execute("PRAGMA foreign_keys=ON;")
+            conn.execute("PRAGMA busy_timeout=5000;")
         except Exception:
             pass
         return conn
@@ -175,7 +195,7 @@ class ItemService:
                 if not row:
                     raise ValueError("project_id not found.")
                 return row[0], row[1], row[2]
-            slug = _slugify(project or "")
+            slug = normalize_project_slug(project or "")
             row = conn.execute(
                 "SELECT id, slug, name FROM projects WHERE slug = ? LIMIT 1;", [slug]
             ).fetchone()
@@ -199,29 +219,26 @@ class ItemService:
 
         Si ya existe, devuelve la info existente (id/slug/name/created_at, items_count).
         """
-        slug = _slugify(slug_or_name or "")
-        if not slug:
-            raise ValueError("You must provide a valid slug.")
+        slug = normalize_project_slug(slug_or_name or "")
         with self._connect() as conn:
-            row = conn.execute(
-                "SELECT id, slug, name, created_at FROM projects WHERE slug = ? LIMIT 1;",
-                [slug],
-            ).fetchone()
             created = False
-            if row:
-                project_id, pslug, pname, created_at = row
-            else:
-                project_id = uuid.uuid4().hex
-                pname = (name or slug).strip() or slug
+            project_id = uuid.uuid4().hex
+            pname = (name or slug).strip() or slug
+            try:
                 conn.execute(
                     "INSERT INTO projects (id, slug, name) VALUES (?, ?, ?);",
                     [project_id, slug, pname],
                 )
                 created = True
-                created_at = conn.execute(
-                    "SELECT created_at FROM projects WHERE id = ?;",
-                    [project_id],
-                ).fetchone()[0]
+            except sqlite3.IntegrityError:
+                created = False
+            row = conn.execute(
+                "SELECT id, slug, name, created_at FROM projects WHERE slug = ? LIMIT 1;",
+                [slug],
+            ).fetchone()
+            if not row:
+                raise RuntimeError(f"Project '{slug}' could not be created.")
+            project_id, _pslug, pname, created_at = row
         # Count items
         with self._connect(read_only=False) as conn:
             items_count = conn.execute(
@@ -239,8 +256,9 @@ class ItemService:
 
     def project_exists(self, slug: str) -> bool:
         """Check if a project with the given slug exists."""
-        s = _slugify(slug or "")
-        if not s:
+        try:
+            s = normalize_project_slug(slug or "")
+        except ValueError:
             return False
         with self._connect(read_only=False) as conn:
             row = conn.execute(
@@ -542,11 +560,7 @@ class ItemService:
         candidate_meta_raw = fields.get("meta") if isinstance(fields, dict) else None
         candidate_meta = candidate_meta_raw if candidate_meta_raw is not None else (current_item.meta or {})
         # Normalize candidate meta shape according to item type for validations below
-        try:
-            normalized_candidate_meta = validate_meta(item_type=current_item.type, meta=candidate_meta or {})
-        except Exception:
-            # Let the usual field-level validation below surface a better error if 'meta' was provided
-            normalized_candidate_meta = candidate_meta or {}
+        normalized_candidate_meta = validate_meta(item_type=current_item.type, meta=candidate_meta)
 
         # Enforce meta requirements when resolving bug/todo items
         if final_status == "resolved" and current_item.type in {"bug", "todo"}:
@@ -575,11 +589,13 @@ class ItemService:
             updates.append("status = ?")
             params.append(_validate_status(fields.get("status")))
         if "meta" in fields:
-            normalized_meta = validate_meta(item_type=current_item.type, meta=fields.get("meta") or {})
+            normalized_meta = validate_meta(item_type=current_item.type, meta=fields.get("meta"))
             updates.append("meta = ?")
             params.append(json.dumps(normalized_meta))
         # typed updates (optional and partial)
         typed_fields = fields.get("typed") if isinstance(fields, dict) else None
+        if "typed" in fields and typed_fields is not None and not isinstance(typed_fields, dict):
+            raise ValueError("'typed' must be an object.")
         if isinstance(typed_fields, dict) and typed_fields:
             # Merge with current to validate required for types that have them
             merged = {**(current_item.typed or {}), **typed_fields}
@@ -684,7 +700,7 @@ class ItemService:
             params.append(item_type)
         if status:
             sql += " AND i.status = ?"
-            params.append(_normalize_status(status))
+            params.append(_validate_status(status))
         sql += " ORDER BY i.updated_at DESC LIMIT ?"
         params.append(max(1, min(limit, 200)))
         with self._connect(read_only=False) as conn:
@@ -803,6 +819,9 @@ class ItemService:
         item = self.get_item(project=project, project_id=project_id, item_id=item_id)
         if expected_version is not None and item.version != expected_version:
                 raise ValueError("Current version does not match expected_version.")
+        normalized_body = new_body or ""
+        if normalized_body == item.body_md:
+            return item
         with self._connect() as conn:
             conn.execute(
                 """
@@ -810,7 +829,7 @@ class ItemService:
                 SET body_md = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP
                 WHERE id = ? AND project_id = ?;
                 """,
-                [new_body or "", item.id, item.project_id],
+                [normalized_body, item.id, item.project_id],
             )
         return self.get_item(project=project, project_id=project_id, item_id=item.id)
 
@@ -844,14 +863,27 @@ class ItemService:
     def delete_project(self, project: Optional[str], project_id: Optional[str]) -> dict[str, int]:
         """Delete a project and all its items explicitly respecting FKs.
 
-        En SQLite garantizamos FK activas y borramos primero hijos y luego el
-        proyecto en dos fases para mantener mensajes claros.
+        The operation runs in a single SQLite transaction so concurrent delete
+        attempts cannot report success for a project that another transaction
+        already removed.
         """
-        proj_id, _slug, _name = self._ensure_project(project, project_id, create_missing=False)
-        # Phase 1: delete children
         with self._connect(read_only=False) as conn:
-            conn.execute("BEGIN TRANSACTION;")
+            conn.execute("BEGIN IMMEDIATE;")
             try:
+                if project_id:
+                    row = conn.execute(
+                        "SELECT id FROM projects WHERE id = ? LIMIT 1;",
+                        [project_id],
+                    ).fetchone()
+                else:
+                    slug = normalize_project_slug(project or "")
+                    row = conn.execute(
+                        "SELECT id FROM projects WHERE slug = ? LIMIT 1;",
+                        [slug],
+                    ).fetchone()
+                if not row:
+                    raise ValueError("Project not found.")
+                proj_id = row[0]
                 items_count = int(
                     conn.execute("SELECT COUNT(1) FROM items WHERE project_id = ?;", [proj_id]).fetchone()[0]
                     or 0
@@ -860,19 +892,9 @@ class ItemService:
                 remaining = conn.execute("SELECT COUNT(1) FROM items WHERE project_id = ?;", [proj_id]).fetchone()[0]
                 if int(remaining or 0) != 0:
                     raise RuntimeError("Could not delete all items for the project before removing it.")
-                conn.execute("COMMIT;")
-            except Exception:
-                try:
-                    conn.execute("ROLLBACK;")
-                except Exception:
-                    pass
-                raise
-
-        # Phase 2: delete parent
-        with self._connect(read_only=False) as conn:
-            conn.execute("BEGIN TRANSACTION;")
-            try:
-                conn.execute("DELETE FROM projects WHERE id = ?;", [proj_id])
+                result = conn.execute("DELETE FROM projects WHERE id = ?;", [proj_id])
+                if result.rowcount != 1:
+                    raise ValueError("Project not found to delete.")
                 conn.execute("COMMIT;")
             except Exception:
                 try:
@@ -883,4 +905,4 @@ class ItemService:
         return {"deleted_items": items_count, "deleted_projects": 1}
 
 
-__all__ = ["ItemRecord", "ItemService", "apply_unified_diff"]
+__all__ = ["ItemRecord", "ItemService", "apply_unified_diff", "normalize_project_slug"]

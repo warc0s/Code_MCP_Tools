@@ -1,8 +1,10 @@
-# Code_MCP_Tools
+# Contextarium
+
+Local context layer for coding agents.
 
 VERSION ACTUAL: V3.0
 
-Servidor MCP + panel web orientado a **coding**: expone tools declarativas para RAG, control de CLIs y gestión de memorias/docs/bugs/todos, todo en un único proceso FastAPI/uvicorn con UI integrada.
+Local MCP server and control panel that gives coding agents persistent project context: memory, docs, bugs, todos, RAG search and controlled tools.
 
 ## Qué incluye la V3.0
 
@@ -67,19 +69,19 @@ Notas de alcance:
 ## Docker (Python 3.12.11)
 
 ```bash
-docker build -t code-mcp-tools .
+docker build -t contextarium-tools .
 docker run -p 8000:8000 \
   -v $(pwd)/data:/app/data \
   -v $(pwd)/.cache:/app/.cache \
   -v $(pwd)/txt:/app/txt \
   -v $(pwd)/config.yaml:/app/config.yaml \
   -e APP_HOST=0.0.0.0 \
-  -e CONTAINER_NAME=code-mcp-tools \
-  --name code-mcp-tools \
-  code-mcp-tools
+  -e CONTAINER_NAME=contextarium-tools \
+  --name contextarium-tools \
+  contextarium-tools
 ```
 
-- En local el host por defecto es `127.0.0.1` (si no defines `APP_HOST`). En Docker se recomienda `APP_HOST=0.0.0.0` (ya incluido en `docker-compose.yml`). Botón “Restart MCP” reinicia el contenedor si `CONTAINER_NAME` está definido. Logs: `docker logs -f code-mcp-tools`.
+- En local el host por defecto es `127.0.0.1` (si no defines `APP_HOST`). En Docker se recomienda `APP_HOST=0.0.0.0` (ya incluido en `docker-compose.yml`). Botón “Restart MCP” reinicia el contenedor si `CONTAINER_NAME` está definido. Logs: `docker logs -f contextarium-tools`.
 
 ### Docker Compose
 
@@ -96,14 +98,6 @@ python -m pytest
 
 Valida RAG híbrido, BM25 (cuando FTS está disponible), contrato MCP y modelos de meta por tipo.
 
-Política de validación dual (AGENTS.md):
-- Añade tests en `test/` y ejecuta `pytest` hasta verde.
-- Verifica manualmente en un Chrome real vía MCP Chrome DevTools los flujos tocados (crear/editar/borrar, drag-and-drop, rebuild, toggles), capturando errores de consola/red.
-
-Recomendación en bugs: logs y/o screenshots
-- Guarda capturas en `static/uploads/bugs/<slug>.png` y referencia `http://127.0.0.1:8000/static/uploads/bugs/<slug>.png` en `meta.screenshots`.
-- `.gitignore` excluye `static/uploads/*` (se conserva `static/uploads/.gitkeep`).
-
 JSON Schema de items en tools MCP
 - `store_item` y `update_item` exponen `typed` (oneOf por tipo; requerido en `store_item` para memory/bug/todo) y `meta` (oneOf opcional). Los clientes pueden construir payloads válidos sin JSONs largos obligatorios.
 
@@ -112,4 +106,3 @@ JSON Schema de items en tools MCP
 - Mejorar soporte FTS/BM25 real en entornos donde la extensión falle (evitar fallback LIKE).
 - Forzar refresco de tools en clientes MCP al inicio de sesión.
 - (Opcional) Multi-corpus en la misma BD con filtrado por corpus en tools RAG.
-- (Opcional) Botón "Attach screenshot" en el editor inline que suba PNG a `static/uploads/bugs/` e inserte su URL en `meta.screenshots`.

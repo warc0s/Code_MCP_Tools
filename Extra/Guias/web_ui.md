@@ -1,4 +1,6 @@
-# Panel web RAG + MCP
+# Panel web Contextarium
+
+Contextarium es una capa local de contexto para agentes de coding: servidor MCP local y panel de control para memoria persistente, docs, bugs, todos, búsqueda RAG y tools controladas.
 
 El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de forma gráfica y en el mismo proceso que el servidor MCP. HTML servido desde `templates/index.html` (backend puro en `app.py`).
 
@@ -16,7 +18,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
     - Nota de ámbito: `docs_count` es global (RAG global). Los contadores de Memory dependen del proyecto activo.
   - Integrations: instrucciones concisas para Codex CLI, Claude Code y GitHub Copilot (VS Code) con botones de copiar y URL actual.
   - AGENTS.md: renderiza las guidelines del backend (`/ui/api/guidelines`).
-    - Tarjetas informativas: recordatorios para Context7 MCP, Chrome DevTools (MCP) y nombre de proyecto. Elimina en tu copia de AGENTS.md las secciones que no apliquen.
+    - Tarjetas informativas: recordatorios para Context7 MCP, Chrome DevTools (MCP) como integración opcional, nombre de proyecto, RAG, Items/Memory y agente experto externo. Elimina en tu copia de AGENTS.md las secciones que no apliquen.
 - **RAG**: subpestañas **Status**, **Ingest** y **Settings**.
   - Settings: configurar modo (`local`/`cloud`), embeddings y reranker. Se guarda en `config.yaml`, marca `needs_restart` + `needs_rebuild`; requiere reinicio y reconstrucción del índice para aplicar.
   - Nota de ámbito: el índice RAG es global (no por proyecto). Un rebuild sustituye el índice global.
@@ -42,7 +44,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
   - Los botones de ingesta (`Index from Sitemap` y `Index from File`) muestran estado de carga (spinner) sobre el propio botón durante la operación.
 - El recuento de documentos y las URLs listadas en Dashboard/RAG se leen directamente de la BD; si cambias de índice (rebuild) o cierras la conexión, los datos se actualizarán en el siguiente Refresh.
 - El header muestra `Restart pending` cuando hay cambios guardados en `config.yaml` que requieren reinicio.
-- En modo Docker, el botón **Restart MCP** ejecuta `docker restart <CONTAINER_NAME>` (por defecto `code-mcp-tools` en `docker-compose.yml`). También puedes reiniciar el contenedor a mano y consultar logs con `docker logs -f code-mcp-tools`.
+- En modo Docker, el botón **Restart MCP** ejecuta `docker restart <CONTAINER_NAME>` (por defecto `contextarium-tools` en `docker-compose.yml`). También puedes reiniciar el contenedor a mano y consultar logs con `docker logs -f contextarium-tools`.
   - Debes establecer `CONTAINER_NAME` (ya incluido en `docker-compose.yml`) para que el botón funcione; no hay fallback a relanzar subprocesos fuera de Docker.
   - Timeout configurable con `DOCKER_RESTART_TIMEOUT_SEC` (por defecto 30s).
 

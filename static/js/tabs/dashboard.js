@@ -14,7 +14,7 @@ function buildCodexSnippet(url) {
   return [
     'rmcp_client = true',
     '',
-    '[mcp_servers.codeMCP_local]',
+    '[mcp_servers.contextarium_local]',
     `url = "${safeUrl}"`,
     'startup_timeout_sec = 2',
     'tool_timeout_sec = 60',
@@ -24,7 +24,7 @@ function buildCodexSnippet(url) {
 
 function buildClaudeAddCommand(url) {
   const safeUrl = url || 'http://127.0.0.1:8000/mcp';
-  return `claude mcp add --transport http code-mcp ${safeUrl}`;
+  return `claude mcp add --transport http contextarium ${safeUrl}`;
 }
 
 function buildCopilotJson(url) {
@@ -32,7 +32,7 @@ function buildCopilotJson(url) {
   return [
     '{',
     '  "servers": {',
-    '    "code-mcp": {',
+    '    "contextarium": {',
     '      "type": "http",',
     `      "url": "${safeUrl}"`,
     '    }',

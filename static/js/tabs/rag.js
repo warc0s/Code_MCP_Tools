@@ -294,6 +294,7 @@ export async function rebuildSitemap(elOrEvent) {
   } catch (e) {
     log('Error rebuilding sitemap: ' + e.message);
     showToast('Error rebuilding sitemap', 'error');
+    stopRebuildMonitoring();
   } finally {
     setButtonLoading(btn, false);
   }
@@ -318,6 +319,7 @@ export async function rebuildFile(elOrEvent) {
   } catch (e) {
     log('Error rebuilding file: ' + e.message);
     showToast('Error rebuilding from file', 'error');
+    stopRebuildMonitoring();
   } finally {
     setButtonLoading(btn, false);
   }

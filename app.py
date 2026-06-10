@@ -31,7 +31,7 @@ from utils.database import read_metadata
 from utils.memory_db import bootstrap_memory_db
 from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
 from utils.env import load_env_file
-from utils.items import ItemService
+from utils.items import ItemService, normalize_project_slug
 from utils.pipeline import rebuild_rag_from_sitemap, rebuild_rag_from_urls
 from utils.retrieval import Retriever
 from utils.reranker import CLOUD_RERANKER_MODEL, PassageReranker
@@ -155,10 +155,12 @@ def _available_tools_from_config(config: AppConfig) -> Optional[list[str]]:
     selected_tools = None
     if tools_config.tool_sets:
         if tools_config.active_set and tools_config.active_set in tools_config.tool_sets:
-            selected_tools = tools_config.tool_sets.get(tools_config.active_set) or {}
+            selected_tools = tools_config.tool_sets.get(tools_config.active_set)
         elif "rag" in tools_config.tool_sets:
-            selected_tools = tools_config.tool_sets.get("rag") or {}
-    if selected_tools:
+            selected_tools = tools_config.tool_sets.get("rag")
+        else:
+            selected_tools = next(iter(tools_config.tool_sets.values()), {})
+    if selected_tools is not None:
         return [name for name, enabled in selected_tools.items() if enabled]
     if tools_config.tools:
         return [name for name, enabled in tools_config.tools.items() if enabled]
@@ -339,6 +341,18 @@ def _persist_enabled_tools(enabled: list[str], state: AppState, config_path: Pat
     data = _load_config_dict(config_path)
     mcp_section = data.get("mcp") or {}
     available = state.toolset.available_tools()
+    invalid = sorted(
+        {
+            str(name)
+            for name in enabled
+            if not isinstance(name, str) or name not in available
+        }
+    )
+    if invalid:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown MCP tools: {', '.join(invalid)}.",
+        )
 
     if mcp_section.get("tool_sets"):
         active_set = mcp_section.get("active_set")
@@ -382,11 +396,24 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
     updated_any = False
     updated_runtime = False
 
+    def optional_string(key: str) -> Optional[str]:
+        if key not in payload or payload.get(key) is None:
+            return None
+        value = payload.get(key)
+        if not isinstance(value, str):
+            raise HTTPException(status_code=400, detail=f"{key} must be a string.")
+        return value.strip()
+
     mcp_data = data.get("mcp") or {}
     data["mcp"] = mcp_data
 
     main_data = data.get("main") or {}
-    mode = (payload.get("mode") or main_data.get("mode") or "local").strip().lower()
+    current_mode = main_data.get("mode") or "local"
+    if not isinstance(current_mode, str):
+        raise HTTPException(status_code=400, detail="main.mode in config.yaml must be a string.")
+    mode = (optional_string("mode") or current_mode).strip().lower()
+    if mode not in {"local", "cloud"}:
+        raise HTTPException(status_code=400, detail="mode must be either 'local' or 'cloud'.")
     if mode != main_data.get("mode"):
         main_data["mode"] = mode
         updated_any = True
@@ -395,13 +422,13 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
 
     embed_data = data.get("embeddings") or {}
     if payload.get("embedding_local") is not None:
-        new_val = payload.get("embedding_local").strip()
+        new_val = optional_string("embedding_local") or ""
         if new_val and new_val != embed_data.get("model_name"):
             embed_data["model_name"] = new_val
             updated_any = True
             updated_runtime = True
     if payload.get("embedding_cloud") is not None:
-        new_val = payload.get("embedding_cloud").strip()
+        new_val = optional_string("embedding_cloud") or ""
         if new_val != embed_data.get("cloud_model_name"):
             embed_data["cloud_model_name"] = new_val or None
             updated_any = True
@@ -410,13 +437,13 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
 
     reranker_data = data.get("reranker") or {}
     if payload.get("reranker_local") is not None:
-        new_val = payload.get("reranker_local").strip()
+        new_val = optional_string("reranker_local") or ""
         if new_val and new_val != reranker_data.get("model_name"):
             reranker_data["model_name"] = new_val
             updated_any = True
             updated_runtime = True
     if payload.get("reranker_cloud") is not None:
-        new_val = payload.get("reranker_cloud").strip()
+        new_val = optional_string("reranker_cloud") or ""
         if new_val != reranker_data.get("cloud_model_name"):
             reranker_data["cloud_model_name"] = new_val or None
             updated_any = True
@@ -425,7 +452,10 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
 
     retrieval_data = data.get("retrieval") or {}
     if "enable_rerank" in payload:
-        desired = bool(payload.get("enable_rerank"))
+        desired_raw = payload.get("enable_rerank")
+        if not isinstance(desired_raw, bool):
+            raise HTTPException(status_code=400, detail="enable_rerank must be a boolean.")
+        desired = desired_raw
         if desired != retrieval_data.get("enable_rerank", False):
             retrieval_data["enable_rerank"] = desired
             updated_any = True
@@ -435,11 +465,16 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
     # UI-only settings (no restart/rebuild)
     ui_data = data.get("ui") or {}
     if payload.get("selected_project") is not None:
-        new_slug = (payload.get("selected_project") or "").strip() or None
+        new_slug = optional_string("selected_project") or None
         if new_slug != ui_data.get("selected_project"):
             ui_data["selected_project"] = new_slug
             updated_any = True
     data["ui"] = ui_data
+
+    try:
+        new_config = AppConfig.from_dict(data)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid settings: {exc}") from exc
 
     try:
         config_path.write_text(yaml.safe_dump(data, sort_keys=False, allow_unicode=False), encoding="utf-8")
@@ -447,7 +482,7 @@ def _persist_settings(payload: Dict[str, Any], state: AppState, config_path: Pat
         logger.error("No se pudo escribir config.yaml: %s", exc)
         raise HTTPException(status_code=500, detail="No se pudo guardar config.yaml.") from exc
 
-    state.config = AppConfig.from_dict(data)
+    state.config = new_config
     state.config_dirty = updated_runtime or state.config_dirty
     state.restart_required = state.restart_required or updated_runtime
     return {"updated": updated_any, "needs_rebuild": state.config_dirty, "needs_restart": state.restart_required}
@@ -664,6 +699,8 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
         # Normalize and validate selected_project existence when provided
         normalized_payload = dict(payload)
         if payload.get("selected_project") is not None:
+            if not isinstance(payload.get("selected_project"), str):
+                raise HTTPException(status_code=400, detail="selected_project must be a string.")
             sel_raw = (payload.get("selected_project") or "").strip()
             sel = _normalize_slug(sel_raw)
             if sel and state.item_service and not state.item_service.project_exists(sel):
@@ -767,25 +804,16 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
         if not state.item_service:
             raise HTTPException(status_code=500, detail="Items service unavailable.")
         raw_slug = (payload.get("slug") or "").strip()
-        slug = _normalize_slug(raw_slug)
         name = (payload.get("name") or "").strip() or None
-        if not slug:
-            raise HTTPException(status_code=400, detail="You must provide a project slug.")
-        if slug in _RESERVED_PROJECT_SLUGS:
-            raise HTTPException(status_code=400, detail=f"Reserved project slug: '{slug}'. Choose a different one.")
-        if len(slug) < 3 or len(slug) > 64:
-            raise HTTPException(status_code=400, detail="Project slug must be between 3 and 64 characters.")
         try:
-            # If exists, return 409 to signal duplicate
-            if state.item_service.project_exists(slug):
-                raise HTTPException(status_code=409, detail="Project already exists.")
+            slug = normalize_project_slug(raw_slug)
             proj = state.item_service.create_project(slug, name=name)
             return {"project": proj}
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=f"Invalid project data: {exc}") from exc
         except Exception as exc:
-            logger.warning("Failed to create project '%s': %s", slug, exc)
-            raise HTTPException(status_code=500, detail=f"Failed to create project '{slug}': {exc}") from exc
+            logger.warning("Failed to create project '%s': %s", raw_slug, exc)
+            raise HTTPException(status_code=500, detail=f"Failed to create project '{raw_slug}': {exc}") from exc
 
     @app.delete("/ui/api/projects/{slug}")
     async def api_project_delete(slug: str):
@@ -842,7 +870,10 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             item = state.item_service.get_item(project=project, project_id=project_id, item_id=item_id)
             return {"item": asdict(item)}
         except ValueError as exc:
-            raise HTTPException(status_code=404, detail=f"Not found: {exc}") from exc
+            detail = str(exc)
+            status_code = 404 if detail.startswith("Item not found") else 400
+            prefix = "Not found" if status_code == 404 else "Invalid request"
+            raise HTTPException(status_code=status_code, detail=f"{prefix}: {exc}") from exc
         except Exception as exc:
             logger.warning("Failed to get item '%s': %s", item_id, exc)
             raise HTTPException(status_code=500, detail=f"Failed to get item '{item_id}': {exc}") from exc

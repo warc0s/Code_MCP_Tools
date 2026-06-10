@@ -24,9 +24,9 @@ def test_store_bug_with_typed_only_succeeds():
     cfg = make_db()
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
-    svc.create_project("p1")
+    svc.create_project("p01")
     item = svc.store_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_type="bug",
         title="B1",
@@ -49,9 +49,9 @@ def test_update_todo_typed_partial():
     cfg = make_db("data/test_memory_typed2.sqlite3")
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
-    svc.create_project("p1")
+    svc.create_project("p01")
     item = svc.store_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_type="todo",
         title="T1",
@@ -61,6 +61,5 @@ def test_update_todo_typed_partial():
         meta={},
         typed={"kind": "feature", "acceptance_criteria": ["a"], "priority": "p2"},
     )
-    updated = svc.update_item(project="p1", project_id=None, item_id=item.id, fields={"typed": {"priority": "p1"}})
+    updated = svc.update_item(project="p01", project_id=None, item_id=item.id, fields={"typed": {"priority": "p1"}})
     assert updated.typed.get("priority") == "p1"
-

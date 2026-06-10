@@ -5,8 +5,10 @@ Pipeline de ingesta que construye la base de datos RAG a partir de distintas fue
 from __future__ import annotations
 
 import hashlib
+import os
 import uuid
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from pathlib import Path
 from typing import Callable, Iterable, Optional
 
 from tqdm import tqdm
@@ -25,6 +27,59 @@ class IngestionSummary:
 
 
 ProgressCallback = Callable[[dict], None]
+
+
+def _remove_file(path: Path) -> None:
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
+
+
+def _wal_path(db_path: Path) -> Path:
+    return Path(f"{db_path}.wal")
+
+
+def _replace_database_atomically(staging_path: Path, destination_path: Path) -> None:
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path = destination_path.with_name(f".{destination_path.name}.{uuid.uuid4().hex}.bak")
+    backup_wal_path = _wal_path(backup_path)
+    destination_wal_path = _wal_path(destination_path)
+    staging_wal_path = _wal_path(staging_path)
+    moved_destination = False
+    moved_destination_wal = False
+    moved_staging = False
+    moved_staging_wal = False
+
+    try:
+        if destination_path.exists():
+            os.replace(destination_path, backup_path)
+            moved_destination = True
+        if destination_wal_path.exists():
+            os.replace(destination_wal_path, backup_wal_path)
+            moved_destination_wal = True
+
+        os.replace(staging_path, destination_path)
+        moved_staging = True
+        if staging_wal_path.exists():
+            os.replace(staging_wal_path, destination_wal_path)
+            moved_staging_wal = True
+    except Exception:
+        if moved_destination or moved_staging:
+            _remove_file(destination_path)
+        if moved_destination_wal or moved_staging_wal:
+            _remove_file(destination_wal_path)
+        if moved_destination and backup_path.exists():
+            os.replace(backup_path, destination_path)
+        if moved_destination_wal and backup_wal_path.exists():
+            os.replace(backup_wal_path, destination_wal_path)
+        raise
+    else:
+        _remove_file(backup_path)
+        _remove_file(backup_wal_path)
+    finally:
+        _remove_file(staging_path)
+        _remove_file(staging_wal_path)
 
 
 def _rebuild_rag_from_crawled_documents(
@@ -126,69 +181,80 @@ def _rebuild_rag_from_crawled_documents(
             }
         )
 
-    manager = DuckDBManager(config.database, embedding_dim)
-    manager.reset()
-    manager.initialize_schema()
+    destination_path = Path(config.database.path)
+    staging_path = destination_path.with_name(f".{destination_path.name}.{uuid.uuid4().hex}.tmp")
+    staging_database = replace(config.database, path=staging_path)
+    manager = DuckDBManager(staging_database, embedding_dim)
+    build_completed = False
+    try:
+        manager.reset()
+        manager.initialize_schema()
 
-    print("Insertando documentos y chunks en DuckDB...")
-    if progress_cb:
-        progress_cb(
-            {
-                "stage": "duckdb_insert",
-                "documents": len(crawled_docs),
-                "chunks": len(chunk_payload),
-                "total": len(chunk_payload),
-                "done": len(chunk_payload),
-            }
-        )
-
-    chunk_rows: list[ChunkRow] = []
-    for payload, vector in zip(chunk_payload, embeddings):
-        chunk_id = hashlib.sha256(
-            f"{payload['doc_id']}::{payload['position']}::{payload['fingerprint']}".encode("utf-8")
-        ).hexdigest()
-        chunk_rows.append(
-            ChunkRow(
-                chunk_id=chunk_id,
-                doc_id=payload["doc_id"],
-                section_path=payload["section_path"],
-                position=payload["position"],
-                text=payload["text"],
-                fingerprint=payload["fingerprint"],
-                embedding=vector,
+        print("Insertando documentos y chunks en DuckDB...")
+        if progress_cb:
+            progress_cb(
+                {
+                    "stage": "duckdb_insert",
+                    "documents": len(crawled_docs),
+                    "chunks": len(chunk_payload),
+                    "total": len(chunk_payload),
+                    "done": len(chunk_payload),
+                }
             )
-        )
 
-    manager.insert_documents(doc_rows)
-    manager.insert_chunks(chunk_rows)
-    # Crear índices pesados tras la carga para evitar mantenimiento incremental por fila
-    manager.create_indexes()
-    if progress_cb:
-        progress_cb(
+        chunk_rows: list[ChunkRow] = []
+        for payload, vector in zip(chunk_payload, embeddings):
+            chunk_id = hashlib.sha256(
+                f"{payload['doc_id']}::{payload['position']}::{payload['fingerprint']}".encode("utf-8")
+            ).hexdigest()
+            chunk_rows.append(
+                ChunkRow(
+                    chunk_id=chunk_id,
+                    doc_id=payload["doc_id"],
+                    section_path=payload["section_path"],
+                    position=payload["position"],
+                    text=payload["text"],
+                    fingerprint=payload["fingerprint"],
+                    embedding=vector,
+                )
+            )
+
+        manager.insert_documents(doc_rows)
+        manager.insert_chunks(chunk_rows)
+        # Crear índices pesados tras la carga para evitar mantenimiento incremental por fila
+        manager.create_indexes()
+        if progress_cb:
+            progress_cb(
+                {
+                    "stage": "done",
+                    "documents": len(doc_rows),
+                    "chunks": len(chunk_rows),
+                    "total": len(chunk_payload),
+                    "done": len(chunk_payload),
+                }
+            )
+
+        reranker_model = (
+            config.reranker.model_name
+            if config.main.mode == "local"
+            else config.reranker.cloud_model_name or config.reranker.model_name
+        )
+        manager.write_metadata(
             {
-                "stage": "done",
-                "documents": len(doc_rows),
-                "chunks": len(chunk_rows),
-                "total": len(chunk_payload),
-                "done": len(chunk_payload),
+                "runtime_mode": config.main.mode,
+                "embedding_model_name": embedder.model_name,
+                "embedding_dim": str(embedding_dim),
+                "reranker_model_name": reranker_model,
             }
         )
+        build_completed = True
+    finally:
+        manager.teardown()
+        if not build_completed:
+            _remove_file(staging_path)
+            _remove_file(_wal_path(staging_path))
 
-    reranker_model = (
-        config.reranker.model_name
-        if config.main.mode == "local"
-        else config.reranker.cloud_model_name or config.reranker.model_name
-    )
-    manager.write_metadata(
-        {
-            "runtime_mode": config.main.mode,
-            "embedding_model_name": embedder.model_name,
-            "embedding_dim": str(embedding_dim),
-            "reranker_model_name": reranker_model,
-        }
-    )
-
-    manager.teardown()
+    _replace_database_atomically(staging_path, destination_path)
 
     return IngestionSummary(documents=len(doc_rows), chunks=len(chunk_rows))
 

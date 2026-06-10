@@ -27,6 +27,8 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 
 from utils.config import CrawlingConfig
 
+MAX_CRAWLING_WORKERS = 16
+
 
 @dataclass
 class CrawledDocument:
@@ -97,16 +99,26 @@ def _is_playwright_stealth_import_error(exc: ImportError) -> bool:
     return ("playwright_stealth" in msg) or ("cannot import name 'Stealth'" in msg) or ("Did you mean: 'stealth'" in msg)
 
 
+def _safe_worker_count(config: CrawlingConfig) -> int:
+    raw_value = getattr(config, "workers", 1)
+    try:
+        workers = int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("crawling.workers must be an integer.") from exc
+    return max(1, min(workers, MAX_CRAWLING_WORKERS))
+
+
 async def discover_urls_from_sitemap(
     sitemap_input: str, config: CrawlingConfig
 ) -> List[Dict]:
     domain = derive_domain_from_sitemap(sitemap_input)
+    workers = _safe_worker_count(config)
     seeding_conf = SeedingConfig(
         source="sitemap",
         extract_head=True,
         pattern=config.pattern,
         max_urls=config.max_urls,
-        concurrency=config.workers * 2,
+        concurrency=workers * 2,
         verbose=False,
         filter_nonsense_urls=True,
         live_check=False,
@@ -132,6 +144,8 @@ async def discover_urls_from_sitemap(
 
 
 async def crawl_urls_to_markdown(url_entries: List[Dict], config: CrawlingConfig) -> List[CrawledDocument]:
+    workers = _safe_worker_count(config)
+
     def _build_markdown_generator(pruning_enabled: bool) -> DefaultMarkdownGenerator:
         content_filter = None
         if pruning_enabled:
@@ -159,7 +173,7 @@ async def crawl_urls_to_markdown(url_entries: List[Dict], config: CrawlingConfig
                 cache_mode=cache,
                 stream=True,
                 verbose=False,
-                semaphore_count=config.workers,
+                semaphore_count=workers,
                 wait_until="domcontentloaded",
                 delay_before_return_html=0.2,
             )
@@ -171,7 +185,7 @@ async def crawl_urls_to_markdown(url_entries: List[Dict], config: CrawlingConfig
             cache_mode=cache,
             stream=True,
             verbose=False,
-            semaphore_count=max(1, min(config.workers, 4)),
+            semaphore_count=max(1, min(workers, 4)),
             wait_until="networkidle",
             page_timeout=90000,
             wait_for="main",
@@ -204,7 +218,7 @@ async def crawl_urls_to_markdown(url_entries: List[Dict], config: CrawlingConfig
     dispatcher = MemoryAdaptiveDispatcher(
         memory_threshold_percent=85.0,
         check_interval=1.0,
-        max_session_permit=config.workers,
+        max_session_permit=workers,
     )
     urls = [e["url"] for e in url_entries]
     results: List[CrawledDocument] = []

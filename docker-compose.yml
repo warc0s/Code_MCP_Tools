@@ -1,6 +1,6 @@
 services:
-  code-mcp-tools:
-    image: code-mcp-tools:latest
+  contextarium:
+    image: contextarium-tools:latest
     build: .
     ports:
       - "8000:8000"
@@ -10,6 +10,6 @@ services:
       - ./txt:/app/txt
       - ./config.yaml:/app/config.yaml
     environment:
-      - CONTAINER_NAME=code-mcp-tools
+      - CONTAINER_NAME=contextarium-tools
       - APP_HOST=0.0.0.0
     restart: unless-stopped

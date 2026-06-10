@@ -65,3 +65,27 @@ def test_update_item_schema_supports_optional_type_hint():
     assert "type" in (fields.get("properties") or {}), "fields.type should exist as an optional hint"
     all_of = fields.get("allOf")
     assert isinstance(all_of, list) and all_of, "update_item fields should include allOf rules"
+
+
+def test_toolset_runtime_schema_rejects_conditional_typed_shape():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    schema = ts.list_tools()["store_item"]["schema"]
+
+    try:
+        ts._validate(schema, {"type": "memory", "title": "Bad", "typed": "not-an-object"})
+    except ValueError as exc:
+        assert "typed" in str(exc)
+    else:
+        raise AssertionError("invalid typed payload should be rejected")
+
+
+def test_toolset_runtime_schema_rejects_bool_for_integer():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    schema = ts.list_tools()["dense_search"]["schema"]
+
+    try:
+        ts._validate(schema, {"query": "alpha", "top_k": True})
+    except ValueError as exc:
+        assert "top_k" in str(exc)
+    else:
+        raise AssertionError("bool must not be accepted as an integer")

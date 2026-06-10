@@ -55,20 +55,30 @@ def build_app(
     base_path: str = DEFAULT_HTTP_PATH,
     lifespan: Optional[Lifespan] = None,
 ) -> FastAPI:
-    app = FastAPI(title="Code_MCP", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="Contextarium", version="0.1.0", lifespan=lifespan)
     base = _normalize_base_path(base_path)
     root_path = base if base != "/" else "/"
 
     def _json_rpc_result(request_id: Optional[object], result: Dict[str, object]) -> object:
-        if request_id is None:
-            logger.debug("Petición sin id completada sin respuesta.")
-            return Response(status_code=204)
         return {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "result": result}
 
     def _json_rpc_error(request_id: Optional[object], code: int, message: str) -> object:
         payload = {"jsonrpc": JSON_RPC_VERSION, "id": request_id, "error": {"code": code, "message": message}}
         logger.warning("JSON-RPC error code=%s message=%s", code, message)
         return payload
+
+    def _structured_tool_result(tool_name: str, results: object) -> object:
+        spec = toolset.list_tools().get(tool_name) or {}
+        output_schema = spec.get("output_schema") or {}
+        required = output_schema.get("required") or []
+        properties = output_schema.get("properties") or {}
+        if (
+            isinstance(results, list)
+            and "results" in required
+            and isinstance(properties.get("results"), dict)
+        ):
+            return {"results": results}
+        return results
 
     @app.get(f"{base}/health")
     async def healthcheck():
@@ -113,9 +123,10 @@ def build_app(
             return _json_rpc_error(None, -32600, "La petición JSON-RPC debe ser un objeto.")
 
         logger.debug("Payload JSON-RPC recibido: %s", payload)
-        request_id = payload.get("id")
+        has_request_id = "id" in payload
+        request_id = payload.get("id") if has_request_id else None
         method = payload.get("method")
-        params = payload.get("params") or {}
+        raw_params = payload.get("params", {})
         version = payload.get("jsonrpc")
 
         if version != JSON_RPC_VERSION:
@@ -124,13 +135,22 @@ def build_app(
         if method is None:
             return _json_rpc_error(request_id, -32600, "Falta el método en la petición JSON-RPC.")
 
-        if request_id is None and not method.startswith("notifications/"):
+        if not has_request_id and not method.startswith("notifications/"):
             return Response(status_code=202)
+
+        if raw_params is None:
+            params: Dict[str, Any] = {}
+        elif isinstance(raw_params, dict):
+            params = raw_params
+        else:
+            if not has_request_id:
+                return Response(status_code=202)
+            return _json_rpc_error(request_id, -32602, "params debe ser un objeto JSON.")
 
         if method == "initialize":
             result = {
                 "protocolVersion": PROTOCOL_VERSION,
-                "serverInfo": {"name": "Code_MCP", "version": "0.1.0"},
+                "serverInfo": {"name": "Contextarium", "version": "0.1.0"},
                 "capabilities": {"tools": {"listChanged": False}},
             }
             return _json_rpc_result(request_id, result)
@@ -163,6 +183,8 @@ def build_app(
             tool_call_id = params.get("toolCallId") or str(uuid.uuid4())
             if not tool_name:
                 return _json_rpc_error(request_id, -32602, "Falta el nombre de la tool en params.name.")
+            if not isinstance(arguments, dict):
+                return _json_rpc_error(request_id, -32602, "params.arguments debe ser un objeto JSON.")
             logger.info("JSON-RPC tools/call tool=%s toolCallId=%s", tool_name, tool_call_id)
             try:
                 results = toolset.call(tool_name, arguments)
@@ -177,14 +199,15 @@ def build_app(
                 tool_name,
                 tool_call_id,
             )
+            structured = _structured_tool_result(tool_name, results)
             result_payload: Dict[str, object] = {
                 "content": [
                     {
                         "type": "text",
-                        "text": json.dumps({"results": results}, ensure_ascii=False),
+                        "text": json.dumps(structured, ensure_ascii=False),
                     }
                 ],
-                "structuredContent": {"results": results},
+                "structuredContent": structured,
             }
             result_payload["_meta"] = {"toolCallId": tool_call_id}
             logger.debug("Payload de respuesta JSON-RPC: %s", result_payload)
@@ -209,7 +232,7 @@ def build_app(
 def build_server(
     retriever,
     enabled_tools: Optional[Iterable[str]] = None,
-    name: str = "Code_MCP",
+    name: str = "Contextarium",
     cli_logs_enabled: bool = True,
 ) -> RAGToolset:
     del name  # el nombre se mantiene solo para compatibilidad de firma

@@ -11,3 +11,4 @@ openai
 requests
 jinja2
 transformers
+jsonschema

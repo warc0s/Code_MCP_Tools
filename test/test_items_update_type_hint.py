@@ -16,9 +16,9 @@ def test_update_item_type_hint_allows_matching_type(tmp_path) -> None:
     cfg = MemoryDatabaseConfig(path=tmp_path / "memory.sqlite3")
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
-    svc.create_project("p1")
+    svc.create_project("p01")
     rec = svc.store_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_type="bug",
         title="B1",
@@ -33,7 +33,7 @@ def test_update_item_type_hint_allows_matching_type(tmp_path) -> None:
         },
     )
     updated = svc.update_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_id=rec.id,
         fields={"type": "bug", "title": "B1 updated"},
@@ -46,9 +46,9 @@ def test_update_item_type_hint_rejects_mismatch(tmp_path) -> None:
     cfg = MemoryDatabaseConfig(path=tmp_path / "memory.sqlite3")
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
-    svc.create_project("p1")
+    svc.create_project("p01")
     rec = svc.store_item(
-        project="p1",
+        project="p01",
         project_id=None,
         item_type="bug",
         title="B1",
@@ -64,9 +64,8 @@ def test_update_item_type_hint_rejects_mismatch(tmp_path) -> None:
     )
     with pytest.raises(ValueError, match=r"Item type mismatch"):
         svc.update_item(
-            project="p1",
+            project="p01",
             project_id=None,
             item_id=rec.id,
             fields={"type": "todo", "title": "B1 updated"},
         )
-

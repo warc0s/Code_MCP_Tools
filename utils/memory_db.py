@@ -14,12 +14,15 @@ from utils.config import MemoryDatabaseConfig
 
 
 def _connect(db_path: Path, read_only: bool = False) -> sqlite3.Connection:
-    # SQLite URI for read-only if needed; here we keep read_write to allow bootstrap
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path.as_posix())
-    # Enforce FK constraints
+    db_path = Path(db_path)
+    if read_only:
+        conn = sqlite3.connect(f"{db_path.resolve().as_uri()}?mode=ro", uri=True)
+    else:
+        db_path.parent.mkdir(parents=True, exist_ok=True)
+        conn = sqlite3.connect(db_path.as_posix())
     try:
         conn.execute("PRAGMA foreign_keys = ON;")
+        conn.execute("PRAGMA busy_timeout = 5000;")
     except Exception:
         pass
     return conn

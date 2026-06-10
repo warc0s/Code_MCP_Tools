@@ -48,7 +48,7 @@ def test_restart_requires_container_name(tmp_path, monkeypatch):
 
 
 def test_restart_success_uses_timeout(tmp_path, monkeypatch):
-    monkeypatch.setenv("CONTAINER_NAME", "code-mcp-tools")
+    monkeypatch.setenv("CONTAINER_NAME", "contextarium-tools")
     monkeypatch.setenv("DOCKER_RESTART_TIMEOUT_SEC", "7.5")
 
     captured = {}
@@ -63,12 +63,12 @@ def test_restart_success_uses_timeout(tmp_path, monkeypatch):
     resp = asyncio.run(_post_restart(tmp_path))
     assert resp.status_code == 200, resp.text
     assert resp.json().get("status") == "restarting"
-    assert captured["args"] == ["docker", "restart", "code-mcp-tools"]
+    assert captured["args"] == ["docker", "restart", "contextarium-tools"]
     assert captured["kwargs"].get("timeout") == 7.5
 
 
 def test_restart_timeout_returns_504(tmp_path, monkeypatch):
-    monkeypatch.setenv("CONTAINER_NAME", "code-mcp-tools")
+    monkeypatch.setenv("CONTAINER_NAME", "contextarium-tools")
     monkeypatch.setenv("DOCKER_RESTART_TIMEOUT_SEC", "0.1")
 
     def _fake_run(args, **kwargs):
@@ -81,7 +81,7 @@ def test_restart_timeout_returns_504(tmp_path, monkeypatch):
 
 
 def test_restart_failure_includes_stderr(tmp_path, monkeypatch):
-    monkeypatch.setenv("CONTAINER_NAME", "code-mcp-tools")
+    monkeypatch.setenv("CONTAINER_NAME", "contextarium-tools")
     monkeypatch.delenv("DOCKER_RESTART_TIMEOUT_SEC", raising=False)
 
     def _fake_run(args, **kwargs):
@@ -92,4 +92,3 @@ def test_restart_failure_includes_stderr(tmp_path, monkeypatch):
     resp = asyncio.run(_post_restart(tmp_path))
     assert resp.status_code == 500
     assert "boom" in (resp.json().get("detail") or "")
-

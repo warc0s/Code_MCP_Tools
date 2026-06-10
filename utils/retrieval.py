@@ -30,6 +30,25 @@ def _cosine_similarity(vec_a: Iterable[float], vec_b: Iterable[float]) -> float:
 logger = logging.getLogger(__name__)
 
 
+def _resolve_top_k(top_k: Optional[int], default: int) -> int:
+    if top_k is None:
+        resolved = default
+    else:
+        if isinstance(top_k, bool):
+            raise ValueError("top_k must be an integer >= 1.")
+        try:
+            resolved = int(top_k)
+        except (TypeError, ValueError) as exc:
+            raise ValueError("top_k must be an integer >= 1.") from exc
+    if resolved < 1:
+        raise ValueError("top_k must be >= 1.")
+    return resolved
+
+
+def _escape_like_token(token: str) -> str:
+    return token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 class Retriever:
     def __init__(
         self,
@@ -92,7 +111,7 @@ class Retriever:
         return self.embedder.embed_query(query)
 
     def _dense_candidates(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
-        top = top_k or self.config.dense_topk
+        top = _resolve_top_k(top_k, self.config.dense_topk)
         logger.debug("Búsqueda densa: query=%s, top_k=%s", query, top)
         try:
             vector = self._generate_embeddings(query)
@@ -207,7 +226,7 @@ class Retriever:
         return candidates
 
     def _lexical_candidates(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
-        top = top_k or self.config.lexical_topk
+        top = _resolve_top_k(top_k, self.config.lexical_topk)
         logger.debug("Búsqueda léxica: query=%s, top_k=%s", query, top)
         rows: List[Any] = []
         if self._check_fts_available():
@@ -243,9 +262,9 @@ class Retriever:
             if not tokens:
                 logger.info("Consulta léxica sin tokens tras normalización: %s", query)
                 return []
-            like_params = [f"%{t}%" for t in tokens]
-            score_expr = " + ".join(["CASE WHEN lower(c.text) LIKE ? THEN 1 ELSE 0 END" for _ in tokens])
-            where_expr = " OR ".join(["lower(c.text) LIKE ?" for _ in tokens])
+            like_params = [f"%{_escape_like_token(t)}%" for t in tokens]
+            score_expr = " + ".join(["CASE WHEN lower(c.text) LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END" for _ in tokens])
+            where_expr = " OR ".join(["lower(c.text) LIKE ? ESCAPE '\\'" for _ in tokens])
             sql = f"""
                 SELECT
                     c.chunk_id,
@@ -306,13 +325,14 @@ class Retriever:
         logger.info("Consulta léxica '%s' → %d candidatos.", cleaned, len(candidates))
         return self._strip_internal(candidates)
 
-    def _apply_mmr(self, candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _apply_mmr(self, candidates: List[Dict[str, Any]], limit: Optional[int] = None) -> List[Dict[str, Any]]:
         selected: List[Dict[str, Any]] = []
         remaining = candidates[:]
         lambda_factor = self.config.mmr_lambda
         penalty = self.config.same_url_penalty
+        final_limit = _resolve_top_k(limit, self.config.final_k)
 
-        while remaining and len(selected) < self.config.final_k:
+        while remaining and len(selected) < final_limit:
             best_candidate = None
             best_score = float("-inf")
             for candidate in remaining:
@@ -332,8 +352,10 @@ class Retriever:
 
     def hybrid_search(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         cleaned = self._ensure_query(query)
-        dense_candidates = self._dense_candidates(cleaned, top_k=top_k or self.config.dense_topk)
-        lexical_candidates = self._lexical_candidates(cleaned, top_k=top_k or self.config.lexical_topk)
+        final_top = _resolve_top_k(top_k, self.config.final_k)
+        candidate_top = top_k if top_k is not None else None
+        dense_candidates = self._dense_candidates(cleaned, top_k=candidate_top)
+        lexical_candidates = self._lexical_candidates(cleaned, top_k=candidate_top)
 
         dense_norm = self._normalize(dense_candidates)
         lexical_norm = self._normalize(lexical_candidates)
@@ -352,13 +374,14 @@ class Retriever:
             record["score"] = self.config.hybrid_alpha * dense_score + (1 - self.config.hybrid_alpha) * lexical_score
 
         candidate_pool = sorted(fused.values(), key=lambda x: x["score"], reverse=True)
-        limit = max(self.config.final_k * 4, self.config.rerank_topk, 8)
+        limit = max(final_top * 4, self.config.final_k * 4, self.config.rerank_topk, 8)
         candidate_pool = candidate_pool[:limit]
 
-        selected = self._apply_mmr(candidate_pool)
+        selected = self._apply_mmr(candidate_pool, limit=final_top)
 
         if self.reranker and self.config.enable_rerank:
-            selected = self.reranker.rerank(cleaned, selected, top_k=self.config.rerank_topk)
+            selected = self.reranker.rerank(cleaned, selected, top_k=final_top)
+            selected = selected[:final_top]
 
         final_norm = self._normalize(selected)
         for item in selected:

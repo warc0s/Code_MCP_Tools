@@ -131,10 +131,10 @@ export async function selectProject(slug) {
   if (!norm) { showToast('Invalid project slug', 'error'); return; }
   const input = document.getElementById('config-project');
   if (input) input.value = norm;
-  setCurrentProject(norm);
-  updateProjectSlugHint();
   try {
     await apiSaveSettings({ selected_project: norm });
+    setCurrentProject(norm);
+    updateProjectSlugHint();
     showToast(`Selected ${norm}`, 'success');
   } catch (e) {
     showToast(e.message || 'Failed to save selected project', 'error');

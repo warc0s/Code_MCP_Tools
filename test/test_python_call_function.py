@@ -8,6 +8,7 @@ import pytest
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from mcp_server.toolset import RAGToolset
+from utils.call_function import call_python_function
 
 
 def test_call_function_success_json_result():
@@ -74,3 +75,28 @@ def test_call_function_rejects_workdir_outside_repo():
                 "workdir": "../",
             },
         )
+
+
+def test_toolset_rejects_unserializable_call_arguments_before_subprocess():
+    ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
+    with pytest.raises(ValueError, match="non-JSON"):
+        ts.call(
+            "python_call_function",
+            {
+                "module": "utils.python_call_samples",
+                "function": "add",
+                "args": [{1, 2}],
+            },
+        )
+
+
+def test_call_python_function_returns_structured_error_for_unserializable_payload():
+    res = call_python_function(
+        module="utils.python_call_samples",
+        function="add",
+        args=[{1, 2}],
+        timeout_ms=1000,
+    )
+
+    assert res["ok"] is False
+    assert res["error_type"] == "TypeError"
