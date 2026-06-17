@@ -137,6 +137,55 @@ def test_replace_body_is_idempotent_for_identical_content(tmp_path):
     assert unchanged.version == rec.version
 
 
+def test_search_items_treats_wildcards_literally(tmp_path) -> None:
+    cfg = MemoryDatabaseConfig(path=tmp_path / "memory.sqlite3")
+    bootstrap_memory_db(cfg)
+    svc = ItemService(cfg)
+    svc.create_project("search-literal")
+    first = svc.store_item(
+        project="search-literal",
+        project_id=None,
+        item_type="doc",
+        title="Has % and id_1 marker",
+        body_md="percent % and id_1",
+        tags=[],
+        status="pending",
+        meta={},
+        typed={},
+    )
+    second = svc.store_item(
+        project="search-literal",
+        project_id=None,
+        item_type="doc",
+        title="Plain text",
+        body_md="just normal body",
+        tags=[],
+        status="pending",
+        meta={},
+        typed={},
+    )
+
+    percent_results = svc.search_items(
+        project="search-literal",
+        project_id=None,
+        query="%",
+        item_type="doc",
+        limit=10,
+    )
+    underscore_results = svc.search_items(
+        project="search-literal",
+        project_id=None,
+        query="id_1",
+        item_type="doc",
+        limit=10,
+    )
+
+    assert [r.id for r in percent_results] == [first.id]
+    assert [r.id for r in underscore_results] == [first.id]
+    assert second.id not in {r.id for r in percent_results}
+    assert second.id not in {r.id for r in underscore_results}
+
+
 def test_create_project_is_atomic_and_idempotent_under_concurrency(tmp_path):
     cfg = MemoryDatabaseConfig(path=tmp_path / "memory.sqlite3")
     bootstrap_memory_db(cfg)

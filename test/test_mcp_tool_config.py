@@ -43,6 +43,59 @@ def test_tool_sets_with_all_tools_disabled_return_empty_selection() -> None:
     assert _available_tools_from_config(config) == []
 
 
+def test_tool_flags_must_be_booleans() -> None:
+    config = AppConfig.from_dict(
+        {
+            "mcp": {
+                "tools": {
+                    "hybrid_search": "false",
+                }
+            }
+        }
+    )
+
+    with pytest.raises(ValueError, match="booleans"):
+        _available_tools_from_config(config)
+
+
+def test_tool_sets_without_active_set_use_stable_sorted_fallback() -> None:
+    config = AppConfig.from_dict(
+        {
+            "mcp": {
+                "tool_sets": {
+                    "z-last": {"hybrid_search": True},
+                    "a-first": {"chunks_by_url": True},
+                }
+            }
+        }
+    )
+
+    assert _available_tools_from_config(config) == ["chunks_by_url"]
+
+
+def test_persist_enabled_tools_uses_stable_tool_set_fallback(tmp_path) -> None:
+    config_path = tmp_path / "config.yaml"
+    original = {
+        "mcp": {
+            "tool_sets": {
+                "z-last": {"hybrid_search": True},
+                "a-first": {"chunks_by_url": False},
+            }
+        }
+    }
+    config_path.write_text(yaml.safe_dump(original, sort_keys=False), encoding="utf-8")
+    state = _state(AppConfig.from_dict(original))
+    try:
+        _persist_enabled_tools(["chunks_by_url"], state, config_path)
+
+        saved = yaml.safe_load(config_path.read_text(encoding="utf-8"))
+        assert saved["mcp"]["active_set"] == "a-first"
+        assert saved["mcp"]["tool_sets"]["a-first"]["chunks_by_url"] is True
+        assert saved["mcp"]["tool_sets"]["z-last"]["hybrid_search"] is True
+    finally:
+        state.executor.shutdown(wait=True, cancel_futures=True)
+
+
 def test_persist_enabled_tools_allows_empty_selection(tmp_path) -> None:
     config_path = tmp_path / "config.yaml"
     config_path.write_text(

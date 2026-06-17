@@ -380,7 +380,13 @@ class Retriever:
         selected = self._apply_mmr(candidate_pool, limit=final_top)
 
         if self.reranker and self.config.enable_rerank:
-            selected = self.reranker.rerank(cleaned, selected, top_k=final_top)
+            try:
+                selected = self.reranker.rerank(cleaned, selected, top_k=final_top)
+            except Exception as exc:
+                logger.warning(
+                    "Reranker failed; returning MMR results without reranking: %s",
+                    exc,
+                )
             selected = selected[:final_top]
 
         final_norm = self._normalize(selected)

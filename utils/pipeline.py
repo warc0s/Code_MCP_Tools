@@ -98,7 +98,7 @@ def _rebuild_rag_from_crawled_documents(
 
     doc_rows: list[DocumentRow] = []
     chunk_payload: list[dict] = []
-    seen_chunk_fingerprints: set[str] = set()
+    seen_chunk_keys: set[tuple[str, str, int, str]] = set()
 
     for doc in crawled_docs:
         doc_id = uuid.uuid4().hex
@@ -114,14 +114,17 @@ def _rebuild_rag_from_crawled_documents(
         chunks = chunk_document(doc.markdown, config.chunking)
         for chunk in chunks:
             fingerprint = chunk["fingerprint"]
-            if fingerprint in seen_chunk_fingerprints:
+            section_path = chunk["section_path"]
+            position = int(chunk["position"])
+            chunk_key = (doc_id, section_path, position, fingerprint)
+            if chunk_key in seen_chunk_keys:
                 continue
-            seen_chunk_fingerprints.add(fingerprint)
+            seen_chunk_keys.add(chunk_key)
             chunk_payload.append(
                 {
                     "doc_id": doc_id,
-                    "section_path": chunk["section_path"],
-                    "position": int(chunk["position"]),
+                    "section_path": section_path,
+                    "position": position,
                     "text": chunk["text"],
                     "fingerprint": fingerprint,
                 }

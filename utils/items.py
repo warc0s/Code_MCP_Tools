@@ -58,6 +58,11 @@ def _normalize_status(status: Optional[str]) -> Optional[str]:
     return candidate or None
 
 
+def _escape_like_token(value: str) -> str:
+    """Escape SQL LIKE wildcards so query terms are matched literally."""
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 def _validate_status(status: Optional[str]) -> Optional[str]:
     normalized = _normalize_status(status)
     if normalized is None:
@@ -599,7 +604,7 @@ class ItemService:
         if isinstance(typed_fields, dict) and typed_fields:
             # Merge with current to validate required for types that have them
             merged = {**(current_item.typed or {}), **typed_fields}
-            normalized_typed = validate_typed_required(current_item.type, merged) if current_item.type in {"memory", "bug", "todo"} else merged
+            normalized_typed = validate_typed_required(current_item.type, merged)
             if current_item.type == "memory":
                 if "topic" in typed_fields:
                     updates.append("memory_topic = ?"); params.append(normalized_typed.get("topic"))
@@ -765,8 +770,14 @@ class ItemService:
                 raise ValueError("Unsupported type for filtering.")
             sql += " AND i.type = ?"
             params.append(item_type)
-        pattern = f"%{cleaned.lower()}%"
-        sql += " AND (lower(i.title) LIKE ? OR lower(i.body_md) LIKE ? OR lower(i.meta) LIKE ?)"
+        pattern = f"%{_escape_like_token(cleaned.lower())}%"
+        sql += (
+            " AND ("
+            "lower(i.title) LIKE ? ESCAPE '\\' "
+            "OR lower(i.body_md) LIKE ? ESCAPE '\\' "
+            "OR lower(i.meta) LIKE ? ESCAPE '\\'"
+            ")"
+        )
         params.extend([pattern, pattern, pattern])
         sql += " ORDER BY i.updated_at DESC LIMIT ?"
         params.append(max(1, min(limit, 200)))

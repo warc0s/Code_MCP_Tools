@@ -5,7 +5,10 @@ Utilidades sencillas para cargar variables desde un archivo .env.
 from __future__ import annotations
 
 import os
+import logging
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def load_env_file(path: Path | str = Path(".env")) -> None:
@@ -18,7 +21,8 @@ def load_env_file(path: Path | str = Path(".env")) -> None:
 
     try:
         content = env_path.read_text(encoding="utf-8")
-    except OSError:
+    except OSError as exc:
+        logger.warning("Could not read env file '%s': %s", env_path, exc)
         return
 
     for raw_line in content.splitlines():

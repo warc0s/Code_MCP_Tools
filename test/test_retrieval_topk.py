@@ -76,6 +76,22 @@ def test_hybrid_search_respects_top_k_with_reranker():
     assert reranker.seen_top_k == 4
 
 
+def test_hybrid_search_falls_back_to_mmr_when_reranker_fails():
+    class FailingReranker:
+        def rerank(self, query, candidates, top_k):
+            raise RuntimeError("reranker unavailable")
+
+    config = RetrievalConfig(final_k=2, enable_rerank=True, rerank_topk=12)
+    retriever = Retriever(None, config, FakeEmbedder(), reranker=FailingReranker())
+    retriever._dense_candidates = lambda query, top_k=None: [_candidate(i) for i in range(8)]
+    retriever._lexical_candidates = lambda query, top_k=None: []
+
+    results = retriever.hybrid_search("query", top_k=4)
+
+    assert len(results) == 4
+    assert all("embedding" not in item for item in results)
+
+
 def test_lexical_like_fallback_escapes_wildcards():
     class RecordingResult:
         def __init__(self, rows):

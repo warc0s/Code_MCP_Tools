@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 from pathlib import Path
 
 import httpx
@@ -12,13 +13,14 @@ from utils.items import ItemService
 from utils.memory_db import bootstrap_memory_db
 
 
-async def _with_client(tmp_path: Path, callback):
-    config = AppConfig.from_dict(
-        {
-            "database": {"path": str(tmp_path / "missing.duckdb")},
-            "memory_database": {"path": str(tmp_path / "memory.sqlite3")},
-        }
-    )
+async def _with_client(tmp_path: Path, callback, selected_project: str | None = None):
+    config_data = {
+        "database": {"path": str(tmp_path / "missing.duckdb")},
+        "memory_database": {"path": str(tmp_path / "memory.sqlite3")},
+    }
+    if selected_project is not None:
+        config_data["ui"] = {"selected_project": selected_project}
+    config = AppConfig.from_dict(config_data)
     bootstrap_memory_db(config.memory_database)
     item_service = ItemService(config.memory_database)
     toolset = RAGToolset(retriever=None, item_service=item_service, enabled_tools=None, cli_logs_enabled=False)
@@ -64,6 +66,18 @@ def test_item_detail_without_project_is_bad_request(tmp_path):
     assert "Invalid request" in response.text
 
 
+def test_status_reports_rag_ready_flag(tmp_path):
+    async def run(client):
+        return await client.get("/ui/api/status")
+
+    response = asyncio.run(_with_client(tmp_path, run))
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["db_exists"] is False
+    assert payload["rag_ready"] is False
+
+
 def test_item_create_rejects_non_object_meta_as_400(tmp_path):
     async def run(client):
         await client.post("/ui/api/projects", json={"slug": "meta-api"})
@@ -88,3 +102,58 @@ def test_item_create_rejects_non_object_meta_as_400(tmp_path):
     assert response.status_code == 400
     assert "meta must be an object" in response.text
 
+
+def test_active_project_delete_guard_uses_canonical_slug(tmp_path):
+    async def run(client):
+        created = await client.post("/ui/api/projects", json={"slug": "my-project"})
+        deleted = await client.delete("/ui/api/projects/my_project")
+        projects = await client.get("/ui/api/projects")
+        return created, deleted, projects
+
+    created, deleted, projects = asyncio.run(
+        _with_client(tmp_path, run, selected_project="my-project")
+    )
+
+    assert created.status_code == 200, created.text
+    assert deleted.status_code == 400, deleted.text
+    assert "active project" in deleted.text
+    slugs = {project["slug"] for project in projects.json()["projects"]}
+    assert "my-project" in slugs
+
+
+def test_rebuild_progress_update_initializes_without_deadlock(tmp_path):
+    config = AppConfig.from_dict(
+        {
+            "database": {"path": str(tmp_path / "missing.duckdb")},
+            "memory_database": {"path": str(tmp_path / "memory.sqlite3")},
+        }
+    )
+    toolset = RAGToolset(retriever=None, item_service=None, enabled_tools=None, cli_logs_enabled=False)
+    state = AppState(
+        config=config,
+        toolset=toolset,
+        retriever=None,
+        connection=None,
+        item_service=None,
+        lock=asyncio.Lock(),
+    )
+    errors: list[BaseException] = []
+    finished = threading.Event()
+
+    def update() -> None:
+        try:
+            state.update_rebuild_progress({"stage": "first", "message": "First progress"})
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            finished.set()
+
+    thread = threading.Thread(target=update, daemon=True)
+    thread.start()
+
+    assert finished.wait(1.0), "update_rebuild_progress deadlocked on empty progress"
+    assert errors == []
+    snapshot = state.snapshot_rebuild_progress()
+    assert snapshot["stage"] == "first"
+    assert snapshot["message"] == "First progress"
+    assert snapshot["seq"] >= 2

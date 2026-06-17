@@ -18,7 +18,8 @@ Nota de ámbito: las tools de Items operan por proyecto. El índice RAG es globa
 - `update_item(project?, project_id?, id, fields)` → actualiza `title`, `tags`, `status`, `meta` (opc) y `typed` (parcial) y sube `version`.
 - `get_item(project?, project_id?, id)` → item único.
 - `list_items(project?, project_id?, type?, status?, tags?, limit=50)` → listado filtrado, ordenado por `updated_at`.
-- `search_items(project?, project_id?, query, type?, tags?, limit=50)` → búsqueda básica sobre `title`, `body_md` y `meta`.
+- `search_items(project?, project_id?, query, type?, tags?, limit=50)` → búsqueda básica sobre `title`, `body_md` y `meta`. La consulta se trata como texto literal.
+- `update_item` valida `typed` también para `doc`; `authors` y `related_docs` se guardan como listas JSON (siempre arrays tras validación).
 - `patch_doc(project?, project_id?, id, unified_diff, expected_version?)` → aplica diff unificado al `body_md` de un `doc`, bump de versión y `updated_at`.
 - `delete_item(project?, project_id?, id)` → elimina el item indicado.
   

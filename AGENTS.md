@@ -33,7 +33,7 @@
 - Configura vía YAML o entorno; evita secretos hardcodeados.
 
 ## Commit & Pull Request Guidelines
-- Alinea commits con el historial: resúmenes breves en presente y en español sin puntuación final (ej. `mayor higiene`).
+- Usa Conventional Commits en inglés, en presente imperativo y sin punto final cuando sea posible (ej. `fix: harden project deletion guard`, `test: cover rebuild progress updates`).
 - Agrupa cambios cohesivos por commit, incluyendo configs o artefactos necesarios.
 - Las PRs describen problema, solución, pruebas y riesgos (env vars, rebuild del índice) e involucran al owner de RAG cuando aplique.
 - Si falta conectividad con el remoto, no reescribas ni enmiendes commits locales: detente y avisa al usuario antes de intentar pulls o pushes.

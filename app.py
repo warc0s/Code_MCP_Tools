@@ -29,7 +29,12 @@ from mcp_server.toolset import RAGToolset
 from utils.config import AppConfig
 from utils.database import read_metadata
 from utils.memory_db import bootstrap_memory_db
-from utils.embeddings import DEFAULT_CLOUD_EMBED_MODEL, EmbeddingProvider
+from utils.embeddings import (
+    DEFAULT_CLOUD_EMBED_MODEL,
+    VOYAGE_4_NANO_DEFAULT_DIM,
+    VOYAGE_4_NANO_MODEL,
+    EmbeddingProvider,
+)
 from utils.env import load_env_file
 from utils.items import ItemService, normalize_project_slug
 from utils.pipeline import rebuild_rag_from_sitemap, rebuild_rag_from_urls
@@ -112,12 +117,76 @@ def _rag_schema_available(db_path: Path) -> bool:
             "SELECT table_name FROM information_schema.tables WHERE table_name IN ('docs', 'chunks');"
         ).fetchall()
         found = {row[0] for row in rows if row and row[0]}
-        return "docs" in found and "chunks" in found
+        if "docs" not in found or "chunks" not in found:
+            return False
+        required_columns = {
+            "docs": {"doc_id", "url", "title", "fingerprint", "created_at"},
+            "chunks": {
+                "chunk_id",
+                "doc_id",
+                "section_path",
+                "position",
+                "text",
+                "fingerprint",
+                "embedding",
+            },
+        }
+        for table, columns in required_columns.items():
+            rows = connection.execute(
+                """
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = ?;
+                """,
+                [table],
+            ).fetchall()
+            existing = {row[0] for row in rows if row and row[0]}
+            missing = sorted(columns - existing)
+            if missing:
+                logger.warning(
+                    "RAG schema incomplete in table '%s'; missing columns: %s",
+                    table,
+                    ", ".join(missing),
+                )
+                return False
+        return True
     except Exception:
         logger.info("No se pudo comprobar el esquema RAG; se asumirá no disponible.")
         return False
     finally:
         connection.close()
+
+
+def _expected_embedding_dim(config: AppConfig) -> Optional[str]:
+    if config.embeddings.embedding_dim is not None:
+        return str(int(config.embeddings.embedding_dim))
+    model_name = (resolve_model_names(config)["embedding"] or "").strip().lower()
+    if config.main.mode == "local" and model_name == VOYAGE_4_NANO_MODEL:
+        return str(VOYAGE_4_NANO_DEFAULT_DIM)
+    return None
+
+
+def _rag_metadata_compatible(connection, config: AppConfig) -> bool:
+    metadata = read_metadata(connection)
+    expected = {
+        "runtime_mode": config.main.mode,
+        "embedding_model_name": resolve_model_names(config)["embedding"],
+    }
+    expected_dim = _expected_embedding_dim(config)
+    if expected_dim is not None:
+        expected["embedding_dim"] = expected_dim
+    mismatches = []
+    for key, expected_value in expected.items():
+        actual_value = metadata.get(key)
+        if actual_value != expected_value:
+            mismatches.append(f"{key}: expected {expected_value!r}, found {actual_value!r}")
+    if mismatches:
+        logger.warning(
+            "RAG index metadata is incompatible with current config; rebuild required. %s",
+            "; ".join(mismatches),
+        )
+        return False
+    return True
 
 
 def load_retriever(config: AppConfig) -> Tuple[Optional[Retriever], Optional[Any]]:
@@ -130,6 +199,11 @@ def load_retriever(config: AppConfig) -> Tuple[Optional[Retriever], Optional[Any
         connection = duckdb.connect(db_path.as_posix(), read_only=True)
         logger.info("BD presente pero sin esquema RAG; se cargarán solo tablas generales.")
         return None, connection
+
+    metadata_connection = duckdb.connect(db_path.as_posix(), read_only=True)
+    if not _rag_metadata_compatible(metadata_connection, config):
+        return None, metadata_connection
+    metadata_connection.close()
 
     ensure_extension_directory()
     _install_extensions(db_path)
@@ -152,6 +226,17 @@ def _available_tools_from_config(config: AppConfig) -> Optional[list[str]]:
     tools_config = getattr(config, "mcp", None)
     if not tools_config:
         return None
+
+    def enabled_names(tool_map: Dict[str, Any]) -> list[str]:
+        if not isinstance(tool_map, dict):
+            raise ValueError("MCP tools configuration must be a mapping of tool names to booleans.")
+        invalid = [name for name, enabled in tool_map.items() if not isinstance(enabled, bool)]
+        if invalid:
+            raise ValueError(
+                "MCP tool flags must be booleans: " + ", ".join(sorted(str(name) for name in invalid))
+            )
+        return [name for name, enabled in tool_map.items() if enabled]
+
     selected_tools = None
     if tools_config.tool_sets:
         if tools_config.active_set and tools_config.active_set in tools_config.tool_sets:
@@ -159,11 +244,12 @@ def _available_tools_from_config(config: AppConfig) -> Optional[list[str]]:
         elif "rag" in tools_config.tool_sets:
             selected_tools = tools_config.tool_sets.get("rag")
         else:
-            selected_tools = next(iter(tools_config.tool_sets.values()), {})
+            selected_name = sorted(tools_config.tool_sets.keys())[0]
+            selected_tools = tools_config.tool_sets.get(selected_name, {})
     if selected_tools is not None:
-        return [name for name, enabled in selected_tools.items() if enabled]
+        return enabled_names(selected_tools)
     if tools_config.tools:
-        return [name for name, enabled in tools_config.tools.items() if enabled]
+        return enabled_names(tools_config.tools)
     return None
 
 
@@ -218,7 +304,20 @@ class AppState:
     def update_rebuild_progress(self, patch: Dict[str, Any]) -> None:
         with self.rebuild_progress_lock:
             if not self.rebuild_progress:
-                self.reset_rebuild_progress()
+                self.rebuild_progress_seq += 1
+                now = time.time()
+                self.rebuild_progress = {
+                    "seq": self.rebuild_progress_seq,
+                    "stage": "starting",
+                    "message": "Starting rebuild",
+                    "total": 0,
+                    "done": 0,
+                    "documents": 0,
+                    "chunks": 0,
+                    "error": None,
+                    "started_at": now,
+                    "updated_at": now,
+                }
             self.rebuild_progress_seq += 1
             self.rebuild_progress["seq"] = self.rebuild_progress_seq
             if patch:
@@ -358,7 +457,7 @@ def _persist_enabled_tools(enabled: list[str], state: AppState, config_path: Pat
         active_set = mcp_section.get("active_set")
         selected_set = active_set if active_set and active_set in mcp_section["tool_sets"] else None
         if not selected_set and mcp_section["tool_sets"]:
-            selected_set = next(iter(mcp_section["tool_sets"].keys()))
+            selected_set = "rag" if "rag" in mcp_section["tool_sets"] else sorted(mcp_section["tool_sets"].keys())[0]
             mcp_section["active_set"] = selected_set
         selected_map = mcp_section["tool_sets"].get(selected_set) if selected_set else None
         if selected_set and isinstance(selected_map, dict):
@@ -608,6 +707,7 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
             "docs_count": overview["docs_count"],
             "sample_urls": overview["sample_urls"],
             "db_exists": bool(state.connection),
+            "rag_ready": bool(state.retriever),
             "mcp_path": base_path,
             "mcp_url": mcp_url,
             "runtime_tools": runtime_tools,
@@ -819,8 +919,12 @@ def create_web_app(state: AppState, base_path: str) -> FastAPI:
     async def api_project_delete(slug: str):
         if not state.item_service:
             raise HTTPException(status_code=500, detail="Items service unavailable.")
-        active = (state.config.ui.selected_project or "").strip().lower()
-        target = (slug or "").strip().lower()
+        try:
+            active_raw = (state.config.ui.selected_project or "").strip()
+            active = normalize_project_slug(active_raw) if active_raw else ""
+            target = normalize_project_slug(slug or "")
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=f"Invalid project slug: {exc}") from exc
         if not target:
             raise HTTPException(status_code=400, detail="You must provide a project slug to delete.")
         if active and target == active:

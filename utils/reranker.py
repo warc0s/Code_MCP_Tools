@@ -5,6 +5,7 @@ Wrapper del reranker con soporte local o mediante DeepInfra.
 from __future__ import annotations
 
 import os
+import re
 from typing import Iterable, List
 
 from utils.cache import configure_model_cache
@@ -13,6 +14,14 @@ from utils.env import load_env_file
 
 CLOUD_RERANKER_MODEL = "Qwen/Qwen3-Reranker-8B"
 DEEPINFRA_RERANKER_BASE_URL = "https://api.deepinfra.com/v1/inference/"
+
+
+def _redact_secrets(message: object, secrets: Iterable[str] = ()) -> str:
+    text = str(message)
+    for secret in secrets:
+        if secret:
+            text = text.replace(str(secret), "[REDACTED]")
+    return re.sub(r"(?i)bearer\s+[A-Za-z0-9._~+/=-]+", "bearer [REDACTED]", text)
 
 
 class PassageReranker:
@@ -128,19 +137,22 @@ class PassageReranker:
                 "El paquete 'requests' es obligatorio para usar el modo cloud del reranker."
             ) from exc
 
+        token = self._ensure_cloud_token()
         headers = {
-            "Authorization": f"bearer {self._ensure_cloud_token()}",
+            "Authorization": f"bearer {token}",
             "Content-Type": "application/json",
         }
         url = f"{DEEPINFRA_RERANKER_BASE_URL}{self.model_name}"
         try:
             response = requests.post(url, headers=headers, json=payload, timeout=60)
         except requests.RequestException as exc:
-            raise RuntimeError(f"Falló la petición al reranker de DeepInfra: {exc}") from exc
+            detail = _redact_secrets(exc, [token])
+            raise RuntimeError(f"Falló la petición al reranker de DeepInfra: {detail}") from exc
 
         if response.status_code >= 400:
+            detail = _redact_secrets(response.text, [token])
             raise RuntimeError(
-                f"DeepInfra devolvió un error {response.status_code} para el reranker: {response.text}"
+                f"DeepInfra devolvió un error {response.status_code} para el reranker: {detail}"
             )
 
         data = response.json()

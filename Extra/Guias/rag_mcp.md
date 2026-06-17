@@ -19,6 +19,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - `cloud` usa el embedding OpenAI `text-embedding-3-small` vía API oficial (requiere `.env` con `openai_api_key=...`) y mantiene el reranker Qwen `8B` servido por DeepInfra (`DEEPINFRA_API_KEY=...` si activas reranking).
 - El panel muestra el modo y los modelos activos. Al iniciar el servidor se registra un aviso si la BD DuckDB fue creada en otro modo, indicando los modelos almacenados vs. configurados y la dimensión registrada.
 - Durante la ingesta se guardan en la tabla `metadata` los campos `runtime_mode`, `embedding_model_name`, `embedding_dim` y `reranker_model_name` para futuras verificaciones.
+- Al arrancar, el servidor valida columnas mínimas de `docs/chunks` y compara metadata crítica (`runtime_mode`, `embedding_model_name` y, cuando se conoce, `embedding_dim`) con `config.yaml`. Si no encaja, mantiene la conexión sólo para estado/overview y no expone un retriever hasta reconstruir el índice.
 
 ### Rendimiento y cuellos de botella típicos
 - Embeddings locales (por defecto `voyageai/voyage-4-nano`) en CPU pueden ser el mayor coste. Si no dispones de GPU, considera:
@@ -32,11 +33,12 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 
 ## Flujo de ingesta
 1. El servidor expone rebuilds desde el panel web y la API: `POST /ui/api/rebuild/sitemap` para sitemap y `POST /ui/api/rebuild/url-file` para ficheros `.txt` en `txt/` (una URL por línea, se ignoran líneas vacías o que empiecen por `#`).
-2. En ambos casos se crawlera con Crawl4AI, se limpia/slugify y se deduplican páginas por fingerprint.
-3. Chunking conserva jerarquía y bloques de código, con solapado configurable (`chunking.respect_headings` y `chunking.preserve_code_blocks`).
-4. Se embebe con el modelo definido por el modo (`voyageai/voyage-4-nano` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en una DuckDB temporal.
-5. La BD temporal sustituye a la anterior mediante swap atómico; si el swap falla, se restaura la BD previa y se limpian temporales.
-6. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
+2. En ambos casos se crawlera con Crawl4AI, se limpia/slugify y se deduplican páginas por URL normalizada.
+3. Los chunks se identifican por documento/segmento/posición para conservar repeticiones entre documentos; no se colapsan entre documentos distintos aunque compartan fingerprint.
+4. Chunking conserva jerarquía y bloques de código, con solapado configurable (`chunking.respect_headings` y `chunking.preserve_code_blocks`).
+5. Se embebe con el modelo definido por el modo (`voyageai/voyage-4-nano` en local o `text-embedding-3-small` en cloud), se normaliza y se guarda en una DuckDB temporal.
+6. La BD temporal sustituye a la anterior mediante swap atómico; si el swap falla, se restaura la BD previa y se limpian temporales.
+7. Índices resultantes: `hnsw(embedding, metric='cosine')` + `fts(text, stopwords='english')`.
    - Rendimiento: la creación de índices HNSW/FTS se difiere hasta después de la inserción masiva de `docs/chunks` para evitar mantenimiento incremental por fila. Esto reduce sensiblemente el tiempo total de rebuild a corpus medio/grande.
 
 ## Retrievers / Tools
@@ -44,6 +46,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 - `lexical_search`: BM25 vía `fts_main_chunks` + `bm25(...)`.
 - `hybrid_search`: normaliza dense/lexical, mezcla con `alpha`, aplica MMR (λ=0.5) + penalización URL (0.08) y opcional reranker Qwen.
 - `hybrid_search` respeta `top_k` como límite final de salida; internamente usa más candidatos cuando hace falta para MMR/reranking.
+- Si el reranker falla (red, proveedor cloud, modelo local), `hybrid_search` degrada a los resultados MMR ya calculados y deja un warning en logs en lugar de romper la búsqueda completa. Los errores del reranker cloud redactan tokens antes de serializarse.
 - `chunks_by_url`: devuelve todos los chunks (metadatos completos) para reconstruir página.
 - `python_cli_start`, `python_cli_send`, `python_cli_stop`, `python_cli_restart`: manejo de sesiones Python interactivas (ver `Extra/Guias/cli_interactiva.md`).
 - `python_call_function`: ejecuta una función Python en un subproceso (no interactivo). Por defecto está deshabilitada en `config.yaml` y sólo permite módulos `utils.*`/`scripts.*`.
@@ -87,6 +90,7 @@ Nota: desde esta versión, la app separa la persistencia en dos BBDD: DuckDB par
 -
 - En este modo, el servidor MCP registrará todas las tools marcadas como `true` en `mcp.tools` sin distinguir conjuntos.
 - La UI valida nombres de tools y settings antes de escribir `config.yaml`; payloads inválidos se rechazan con 400 para no dejar la configuración en un estado no arrancable.
+- Los flags de `mcp.tools` y `mcp.tool_sets` deben ser booleanos YAML reales (`true`/`false`), no strings como `"false"`. Si falta `active_set`, se elige `rag` si existe; si no, el primer set por nombre ordenado para evitar depender del orden del fichero.
 
 ## Servidor MCP
 - Servidor HTTP basado en FastAPI + uvicorn (ruta por defecto `/mcp`, configurable en el arranque) que expone las tools registradas en `mcp_server/toolset.py`.
@@ -137,6 +141,7 @@ Consulta también Dashboard → Integrations para snippets con tu MCP URL actual
 - Reranker activado por defecto (`enable_rerank: true`) usando Qwen `0.6B` en local o `8B` vía DeepInfra en cloud; desactívalo con `retrieval.enable_rerank`.
   - El reranker no participa en la ingesta; sólo en búsqueda. No impacta el rebuild salvo por la carga inicial del modelo si ya está activo en el servidor.
 - Para operar en cloud define `openai_api_key` (o `OPENAI_API_KEY`) en `.env`; añade `DEEPINFRA_API_KEY` solo si mantienes el reranker remoto.
+- Si `.env` existe pero no se puede leer, el arranque registra un warning sin volcar contenido del archivo.
 - Embeddings cloud usa timeout y reintentos explícitos del cliente OpenAI: `OPENAI_TIMEOUT_SEC` (45s por defecto) y `OPENAI_MAX_RETRIES` (2 por defecto).
 - GPU si está disponible: el proveedor de embeddings detecta CUDA y usa GPU de forma automática; si no, CPU. Asegúrate de instalar versiones emparejadas de Torch/TorchVision (por ejemplo, `torch==2.4.1` y `torchvision==0.19.1`).
 - `voyageai/voyage-4-nano` se carga con `trust_remote_code=True` y `truncate_dim=1024` por defecto. Si configuras `embeddings.embedding_dim`, sólo se aceptan `2048`, `1024`, `512` o `256`, y el proveedor usa `encode_query`/`encode_document` para aplicar los prompts correctos de consulta/documento.
