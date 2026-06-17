@@ -15,7 +15,7 @@ Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
 ## Pestaña Memory
 - Subpestañas: Memory, Docs, Bugs, Todo.
 - El board tipo kanban aparece en `Todo` y ahora también en `Bugs`.
-  - En `Bugs` se muestran solo dos columnas: `Pending` y `Resolved`.
+  - En `Bugs` se muestran solo dos columnas: `Pending` y `Resolved`; cualquier estado no resuelto (`pending`, `in_progress`, `to_verify` o vacío) se agrupa visualmente en `Pending` para no ocultar bugs creados desde API/MCP.
 - Para Memory/Docs/Bugs se muestra un listado de tarjetas simple (grid), con:
   - Título, tipo, versión, tags
   - Extracto del body (cuando aplica)

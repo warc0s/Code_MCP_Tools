@@ -17,3 +17,11 @@ def test_guidelines_info_cards_and_preview_present():
     assert 'AGENTS.md' in html
     assert 'id="guidelines-content"' in html
     assert 'Copy to Clipboard' in html
+
+
+def test_dashboard_status_pill_distinguishes_rag_readiness():
+    js = Path('static/js/tabs/dashboard.js').read_text(encoding='utf-8')
+    assert 'data.rag_ready' in js
+    assert 'RAG Ready' in js
+    assert 'RAG Needs Rebuild' in js
+    assert 'RAG Not Ready' in js

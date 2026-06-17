@@ -146,15 +146,20 @@ export async function refreshDashboardStatus() {
     const dot = document.createElement('span');
     dot.className = 'pulse';
     dot.style.cssText = 'width: 6px; height: 6px; border-radius: 50%;';
-    if (data.db_exists) {
+    if (data.rag_ready) {
       dot.style.background = '#22c55e';
       statusPill.appendChild(dot);
-      statusPill.appendChild(document.createTextNode('MCP Ready'));
+      statusPill.appendChild(document.createTextNode('RAG Ready'));
       statusPill.style.cssText = 'background: rgba(34, 197, 94, 0.15); color: #16a34a; border: 1px solid rgba(34, 197, 94, 0.3); font-weight: 500;';
+    } else if (data.db_exists) {
+      dot.style.background = '#f59e0b';
+      statusPill.appendChild(dot);
+      statusPill.appendChild(document.createTextNode('RAG Needs Rebuild'));
+      statusPill.style.cssText = 'background: rgba(245, 158, 11, 0.15); color: #b45309; border: 1px solid rgba(245, 158, 11, 0.3); font-weight: 500;';
     } else {
       dot.style.background = '#ef4444';
       statusPill.appendChild(dot);
-      statusPill.appendChild(document.createTextNode('MCP Not Ready'));
+      statusPill.appendChild(document.createTextNode('RAG Not Ready'));
       statusPill.style.cssText = 'background: rgba(239, 68, 68, 0.15); color: #dc2626; border: 1px solid rgba(239, 68, 68, 0.3); font-weight: 500;';
     }
   }

@@ -16,6 +16,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
   - Subpestañas: **Status**, **Integrations**, **AGENTS.md**.
   - Status: muestra `mode`, `embedding`, `reranker`, `docs_count`, `MCP URL` completo, tools activas agrupadas por grupo (`rag`, `python_cli`, `items`) y tarjeta Memory con proyecto activo y contadores por tipo.
     - Nota de ámbito: `docs_count` es global (RAG global). Los contadores de Memory dependen del proyecto activo.
+    - El pill principal distingue `RAG Ready`, `RAG Needs Rebuild` y `RAG Not Ready`; una BD abierta no implica que el retriever sea compatible con la configuración actual.
   - Integrations: instrucciones concisas para Codex CLI, Claude Code y GitHub Copilot (VS Code) con botones de copiar y URL actual.
   - AGENTS.md: renderiza las guidelines del backend (`/ui/api/guidelines`).
     - Tarjetas informativas: recordatorios para Context7 MCP, Chrome DevTools (MCP) como integración opcional, nombre de proyecto, RAG, Items/Memory y agente experto externo. Elimina en tu copia de AGENTS.md las secciones que no apliquen.
@@ -27,6 +28,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 - **Memory**: pestaña con tab interno por tipo (`memory`, `doc`, `bug`, `todo`), selección/creación de proyecto, creación de items, tablero estilo Kanban (estados `pending` → `in_progress` → `to_verify` → `resolved` con drag & drop), edición de metadatos y patch de docs con diff unificado. También permite borrar items.
   - Nota de ámbito: Memory es por proyecto; selecciona/crea el proyecto activo en Configuration → Settings.
   - Gestión de proyectos: en la tarjeta de selección de proyecto verás el listado con botones `Use` y `Delete`. No se permite borrar el proyecto activo. A partir de esta versión, el botón `Delete` se mantiene habilitado también para el proyecto activo y, al pulsarlo, la UI muestra un toast de error informando: “You cannot delete the active project. Change the selection first.” (quedando claro el motivo). Al borrar cualquier otro proyecto, se muestra doble confirmación en inglés avisando de que se eliminarán todos los items asociados (memory/doc/bug/todo) y que no hay vuelta atrás.
+  - El backend canonicaliza los slugs antes de borrar, así que variantes equivalentes como guiones bajos frente a guiones no pueden saltarse la protección del proyecto activo.
 - **Settings**: aquí solo queda la tarjeta de selección de proyecto (crear/activar, lista y borrado con confirmaciones). Los ajustes de RAG están en **RAG → Settings**.
 - **Ingesta**: reconstrucción por sitemap o por ficheros de `txt/` (una URL por línea; `#` como comentario). Sustituye la BD actual y recarga el retriever en caliente.
 - **Docs**: lista hasta 50 documentos recientes (doc_id, título, URL, fecha) obtenidos de la BD en solo lectura.
@@ -34,6 +36,7 @@ El panel web ofrece las mismas capacidades que la antigua CLI, pero expuestas de
 
 ## Comportamiento y límites
 - Reconstrucciones bloquean concurrentes (409 si ya hay una en curso). Se cierra la conexión previa antes de regenerar la BD para evitar bloqueos, y al finalizar se recarga el retriever en caliente.
+- El progreso de reconstrucción se inicializa de forma defensiva: cualquier callback tardío o llamada directa a progreso puede actualizar el estado aunque no haya snapshot previo.
 - Si no existe la BD al iniciar, el panel sigue disponible; las tools RAG devolverán error amigable hasta que se reconstruya.
 - Sesiones CLI inactivas o muy antiguas (>30 minutos) se limpian automáticamente para evitar fugas.
 - Python CLI: sesiones orientadas a Python (script o módulo). No ejecuta shell general.

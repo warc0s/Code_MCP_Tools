@@ -479,14 +479,21 @@ function getBoardStatusesForType(type) {
   return boardStatuses;
 }
 
+function getDisplayStatusKey(item, type) {
+  const status = (item?.status || 'pending').toLowerCase();
+  if ((type || '').toLowerCase() === 'bug' && status !== 'resolved') return 'pending';
+  return status;
+}
+
 function renderBoard(items, statuses) {
   const board = document.getElementById('board');
   if (!board) return;
   board.innerHTML = '';
   const byStatus = {};
+  const currentType = getCurrentItemType();
   items.forEach((item) => {
     itemsCache.set(item.id, item);
-    const statusKey = (item.status || 'pending').toLowerCase();
+    const statusKey = getDisplayStatusKey(item, currentType);
     byStatus[statusKey] = byStatus[statusKey] || [];
     byStatus[statusKey].push(item);
   });
