@@ -1,5 +1,5 @@
 """
-Servidor MCP minimalista expuesto vía FastAPI.
+Minimal MCP server exposed through FastAPI.
 """
 
 from __future__ import annotations
@@ -30,8 +30,8 @@ Lifespan = Callable[[FastAPI], AsyncIterator[None]]
 
 
 class ToolCall(BaseModel):
-    tool: str = Field(..., description="Nombre de la tool a ejecutar.")
-    arguments: Dict[str, object] = Field(default_factory=dict, description="Argumentos JSON que sigue el schema.")
+    tool: str = Field(..., description="Tool name to execute.")
+    arguments: Dict[str, object] = Field(default_factory=dict, description="JSON arguments following the schema.")
 
 
 @dataclass
@@ -104,10 +104,10 @@ def build_app(
         try:
             results = toolset.call(payload.tool, payload.arguments or {})
         except ValueError as exc:
-            logger.warning("Tool '%s' rechazó los argumentos: %s", payload.tool, exc)
+            logger.warning("Tool '%s' rejected arguments: %s", payload.tool, exc)
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
-            logger.exception("Error inesperado en tool '%s'", payload.tool)
+            logger.exception("Unexpected error in tool '%s'", payload.tool)
             raise HTTPException(status_code=500, detail=str(exc)) from exc
         return {"tool": payload.tool, "results": results}
 
@@ -115,14 +115,14 @@ def build_app(
     async def json_rpc_endpoint(request: Request):
         try:
             payload = await request.json()
-        except Exception as exc:  # pragma: no cover - FastAPI maneja el parseo
-            logger.debug("Fallo parseando JSON-RPC: %s", exc)
-            return _json_rpc_error(None, -32700, "JSON inválido.")
+        except Exception as exc:  # pragma: no cover - FastAPI handles parsing
+            logger.debug("Failed to parse JSON-RPC: %s", exc)
+            return _json_rpc_error(None, -32700, "Invalid JSON.")
 
         if not isinstance(payload, dict):
-            return _json_rpc_error(None, -32600, "La petición JSON-RPC debe ser un objeto.")
+            return _json_rpc_error(None, -32600, "JSON-RPC request must be an object.")
 
-        logger.debug("Payload JSON-RPC recibido: %s", payload)
+        logger.debug("Received JSON-RPC payload: %s", payload)
         has_request_id = "id" in payload
         request_id = payload.get("id") if has_request_id else None
         method = payload.get("method")
@@ -130,10 +130,10 @@ def build_app(
         version = payload.get("jsonrpc")
 
         if version != JSON_RPC_VERSION:
-            return _json_rpc_error(request_id, -32600, "Versión JSON-RPC no soportada.")
+            return _json_rpc_error(request_id, -32600, "Unsupported JSON-RPC version.")
 
         if method is None:
-            return _json_rpc_error(request_id, -32600, "Falta el método en la petición JSON-RPC.")
+            return _json_rpc_error(request_id, -32600, "Missing method in JSON-RPC request.")
 
         if not has_request_id and not method.startswith("notifications/"):
             return Response(status_code=202)
@@ -145,7 +145,7 @@ def build_app(
         else:
             if not has_request_id:
                 return Response(status_code=202)
-            return _json_rpc_error(request_id, -32602, "params debe ser un objeto JSON.")
+            return _json_rpc_error(request_id, -32602, "params must be a JSON object.")
 
         if method == "initialize":
             result = {
@@ -174,7 +174,7 @@ def build_app(
             level_name = (params or {}).get("level", "INFO")
             numeric_level = getattr(logging, str(level_name).upper(), logging.INFO)
             logging.getLogger().setLevel(numeric_level)
-            logger.info("Nivel de logging ajustado a %s (%s)", level_name, numeric_level)
+            logger.info("Logging level set to %s (%s)", level_name, numeric_level)
             return _json_rpc_result(request_id, {})
 
         if method == "tools/call":
@@ -182,20 +182,20 @@ def build_app(
             arguments = params.get("arguments") or {}
             tool_call_id = params.get("toolCallId") or str(uuid.uuid4())
             if not tool_name:
-                return _json_rpc_error(request_id, -32602, "Falta el nombre de la tool en params.name.")
+                return _json_rpc_error(request_id, -32602, "Missing tool name in params.name.")
             if not isinstance(arguments, dict):
-                return _json_rpc_error(request_id, -32602, "params.arguments debe ser un objeto JSON.")
+                return _json_rpc_error(request_id, -32602, "params.arguments must be a JSON object.")
             logger.info("JSON-RPC tools/call tool=%s toolCallId=%s", tool_name, tool_call_id)
             try:
                 results = toolset.call(tool_name, arguments)
             except ValueError as exc:
-                logger.warning("Tool '%s' rechazó los argumentos JSON-RPC: %s", tool_name, exc)
+                logger.warning("Tool '%s' rejected JSON-RPC arguments: %s", tool_name, exc)
                 return _json_rpc_error(request_id, -32602, str(exc))
-            except Exception as exc:  # pragma: no cover - logging para fallos inesperados
-                logger.exception("Error inesperado ejecutando tool %s", tool_name)
-                return _json_rpc_error(request_id, -32000, f"Error interno: {exc}")
+            except Exception as exc:  # pragma: no cover - logging for unexpected failures
+                logger.exception("Unexpected error while executing tool %s", tool_name)
+                return _json_rpc_error(request_id, -32000, f"Internal error: {exc}")
             logger.debug(
-                "JSON-RPC tool=%s toolCallId=%s ejecutada.",
+                "JSON-RPC tool=%s toolCallId=%s executed.",
                 tool_name,
                 tool_call_id,
             )
@@ -210,7 +210,7 @@ def build_app(
                 "structuredContent": structured,
             }
             result_payload["_meta"] = {"toolCallId": tool_call_id}
-            logger.debug("Payload de respuesta JSON-RPC: %s", result_payload)
+            logger.debug("JSON-RPC response payload: %s", result_payload)
             return _json_rpc_result(request_id, result_payload)
 
         if method.startswith("notifications/"):
@@ -219,7 +219,7 @@ def build_app(
         if method == "ping":
             return _json_rpc_result(request_id, {"ok": True})
 
-        return _json_rpc_error(request_id, -32601, f"Método JSON-RPC no soportado: {method}")
+        return _json_rpc_error(request_id, -32601, f"Unsupported JSON-RPC method: {method}")
 
     if root_path != "/":
         @app.post("/")
@@ -235,7 +235,7 @@ def build_server(
     name: str = "Contextarium",
     cli_logs_enabled: bool = True,
 ) -> RAGToolset:
-    del name  # el nombre se mantiene solo para compatibilidad de firma
+    del name  # kept only for signature compatibility
     return RAGToolset(
         retriever=retriever,
         enabled_tools=enabled_tools,

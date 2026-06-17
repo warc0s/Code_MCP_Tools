@@ -10,11 +10,11 @@ from mcp_server.toolset import RAGToolset
 
 
 def test_toolset_declares_output_schema():
-    # Sin retriever ni item service: solo inspeccionamos el catálogo
+    # No retriever or item service: inspect only the catalog.
     ts = RAGToolset(retriever=None, enabled_tools=None, cli_logs_enabled=False)
     tools = ts.list_tools()
     assert isinstance(tools, dict) and tools
-    # Al menos una tool debe declarar output_schema (p. ej., hybrid_search)
+    # At least one tool should declare output_schema (for example, hybrid_search).
     assert any("output_schema" in spec for spec in tools.values())
 
 

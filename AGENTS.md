@@ -1,78 +1,85 @@
 # Repository Guidelines
 
-## Flujo de trabajo
-- Antes de aplicar cualquier cambio, revisa el contexto relacionado y los flujos afectados para detectar regresiones.
+## Workflow
+
+- Before applying any change, review the related context and affected flows to detect regressions.
 
 ## Engineering Principles
-- **Work doggedly.** Mantén autonomía mientras haya progreso; si paras, explica por qué.
-- **Work smart.** Ante bugs, retrocede, considera causas y añade logging para validar supuestos.
-- **Check your work.** Prueba cada bloque nuevo y, en procesos largos, revisa logs tras 30s para confirmar avance.
-- **Be cautious with terminal commands.** Lanza solo comandos que terminen solos; los persistentes van con `nohup` u otro wrapper y evita scripts colgados.
-- **Robustez total.** Cada solución debe contemplar explícitamente edge cases y fallos operativos; prioriza mensajes claros y defensivos ante dependencias, red o inputs inesperados.
- - **Evita parches.** No desactives integridad referencial ni otras garantías del motor como solución rápida. Prefiere invariantes de esquema y cambios de esquema explícitos.
- - **Desarrollo sin apego a datos.** En esta fase no mantenemos compatibilidad con BDs antiguas. Si un cambio de esquema lo requiere, recrea la BD y el índice (se asume que no hay datos relevantes que conservar).
- - **Migraciones claras.** Cuando sea oportuno, añade migraciones idempotentes; mientras estemos en desarrollo, prioriza la simplicidad: recrear artefactos antes que introducir toggles o soluciones frágiles.
 
-## Validación y pruebas
-- Por cada funcionalidad nueva añade un test en `test/` que la cubra y ejecútalo con `pytest`.
-- Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest) hasta conseguir estabilidad.
-- Cobertura mínima esperada: incluir al menos un test que cubra el happy path y un edge case relevante.
+- **Work doggedly.** Stay autonomous while progress is possible; if you stop, explain why.
+- **Work smart.** When debugging, step back, consider root causes, and add logging to validate assumptions.
+- **Check your work.** Test every new block and, in long-running processes, review logs after 30s to confirm progress.
+- **Be cautious with terminal commands.** Only launch commands that terminate by themselves; persistent commands must use `nohup` or another wrapper, and avoid hanging scripts.
+- **Total robustness.** Every solution must explicitly account for edge cases and operational failures; prioritize clear, defensive messages for dependencies, network, or unexpected inputs.
+- **Avoid patches.** Do not disable referential integrity or other engine guarantees as a quick fix. Prefer schema invariants and explicit schema changes.
+- **Development without data attachment.** At this stage, compatibility with old DBs is not maintained. If a schema change requires it, recreate the DB and index; assume there is no relevant data to preserve.
+- **Clear migrations.** When appropriate, add idempotent migrations; while in development, prefer simplicity: recreate artifacts before adding toggles or fragile workarounds.
 
-## Memoria operativa (items)
-- `memory`: decisiones de diseño, invariantes, convenciones duras (naming, patrones que no se rompen), razones de arquitectura, mapas mentales breves y antipatrones detectados. Úsalo para atajos que el agente debe recordar antes de tocar código.
-- `doc`: manuales o flujos largos (arquitectura, APIs, protocolos, pasos de despliegue), ejemplos reproducibles, listas de comandos; edita con `patch_doc` (diffs) para mantener historia limpia.
-- `bug`: incidencias reproducibles o P0 sospechados; documenta entorno, pasos exactos y comportamiento esperado/observado; añade meta con:
-  - `severity` (`high|medium|low`), `reproduction` (pasos exactos), `expected`, `root_cause`
-  - opcionales: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (lista), `related_files` (lista)
-- `todo`: tareas accionables; meta con `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (lista), `dependencies` (lista), `priority` (`p0|p1|p2`). Divide si la tarea crece.
-  - opcional: `related_files` (lista de rutas/URLs)
+## Validation And Tests
 
-## Coding Style & Naming Conventions
-- Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
-- Añade typing y docstrings orientados; extrae helpers antes de anidar lógica.
-- Configura vía YAML o entorno; evita secretos hardcodeados.
+- For every new feature, add a test in `test/` that covers it and run it with `pytest`.
+- Iterate until functional: if tests or UI checks fail, fix and repeat the cycle (code -> pytest) until stable.
+- Minimum expected coverage: include at least one happy path test and one relevant edge case.
 
-## Commit & Pull Request Guidelines
-- Usa Conventional Commits en inglés, en presente imperativo y sin punto final cuando sea posible (ej. `fix: harden project deletion guard`, `test: cover rebuild progress updates`).
-- Agrupa cambios cohesivos por commit, incluyendo configs o artefactos necesarios.
-- Las PRs describen problema, solución, pruebas y riesgos (env vars, rebuild del índice) e involucran al owner de RAG cuando aplique.
-- Si falta conectividad con el remoto, no reescribas ni enmiendes commits locales: detente y avisa al usuario antes de intentar pulls o pushes.
+## Operational Memory (Items)
 
-## Normas y recordatorios finales
-- Respondes siempre en español
-- Estas en un entorno conda asi que deberias ser capaz de ejecutar la aplicacion sin problemas. Si añades un nuevo import que deba usar la aplicacion, puedes instalarlo pero recuerda añadirlo al requirements.txt. Si ves que faltan demasiados paquetes, igual el usuario se olvido de activar el entorno conda antes de llamarte, puedes preguntarle en dicho caso
-- Crea o edita las guias actuales (Extra/Guias/...), o bien genera nuevas si es algo demasiado diferente, con cada cambio que implementes que consideres digno de anotar
-- Antes de empezar cualquier tarea, recopila toda la información disponible sobre el repositorio: revisa, lee **todas** las guías de `Extra/Guias/`, inspecciona los archivos relevantes y confirma el estado actual antes de proponer o ejecutar cambios.
-- Itera siempre guiandote por pruebas reproducibles y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
-- Cada implementación debe ir acompañada de un test nuevo en la carpeta `test/` y no se considera lista hasta que las pruebas pasen en verde (ejecuta `pytest`)
-- Una vez finalices la tarea que te ha encargado el usuario y se haya comprobado que es estable y valida, preguntale al usuario si debes hacer "git add ." y commit con un comentario aclaratorio de lo añadido. Tu jamás harás push, el usuario lo hace, solo debes add y commit. SIEMPRE ESPERANDO APROBACION DEL USUARIO.
-- No ejecutes comandos git (add, commit, reset, revert, etc.) salvo que el usuario lo pida explícitamente.
-- A la hora de añadir nuevas funciones y demas en 'utils', implementalas en el .py que consideres mas adecuado O BIEN escribe uno nuevo si ninguno se amolda a lo que vas a programar.
-- Nunca te identifiques como responsable ni menciones nombres de agentes (p.ej., Codex); enfócate en describir acciones y resultados.
-- La aplicación se ejecuta desde `app.py` y los imports estan en 'utils'. Respeta esto.
-- Trata que los archivos no superen las dos mil lineas de codigo
-- Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
+- `memory`: design decisions, invariants, hard conventions (naming, patterns that must not be broken), architectural rationale, brief mental maps, and detected antipatterns. Use it for shortcuts the agent should remember before touching code.
+- `doc`: manuals or long flows (architecture, APIs, protocols, deployment steps), reproducible examples, command lists; edit with `patch_doc` (diffs) to keep history clean.
+- `bug`: reproducible incidents or suspected P0s; document environment, exact steps, and expected/observed behavior; add meta with:
+  - `severity` (`high|medium|low`), `reproduction` (exact steps), `expected`, `root_cause`
+  - optional: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (list), `related_files` (list)
+- `todo`: actionable tasks; meta with `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (list), `dependencies` (list), `priority` (`p0|p1|p2`). Split it if the task grows.
+  - optional: `related_files` (list of paths/URLs)
 
-## Agente experto externo (con acceso a internet)
+## Coding Style And Naming Conventions
 
-- El usuario dispone de un agente externo con acceso a internet que puedes solicitar en cualquier momento. Úsalo cuando un análisis experto pueda ahorrarte tiempo o evitar decisiones obsoletas. Escribe un prompt claro, compártelo con el usuario para que lo envíe y espera su respuesta antes de aplicar cambios.
+- Use 4-space indentation, snake_case, and uppercase constants; keep logs concise.
+- Add typing and targeted docstrings; extract helpers before nesting logic.
+- Configure through YAML or environment; avoid hardcoded secrets.
 
-- Cuándo pedirlo
-  - Decisiones de arquitectura y diseño (patrones, límites, contratos de API).
-  - Comparativas serias de soluciones/librerías/servidores MCP y sus trade‑offs.
-  - Seguridad (políticas, whitelists/flags, límites de recursos, auditoría).
-  - Cross‑platform (WSL, macOS, Windows/ConPTY), TTY, señales, rendimiento/robustez.
-  - Elección de dependencias y roadmaps (evitar arquitecturas obsoletas desde el minuto uno).
+## Commit And Pull Request Guidelines
 
-- Cómo usarlo
-  - Escribe un prompt claro con el contexto y las restricciones y pásaselo al usuario para que lo envíe a este agente; espera su respuesta antes de ejecutar cambios.
-  - Pide entregables accionables: resumen ejecutivo, comparativa, plan por pasos y recomendaciones.
-  - No dudes en pedirlo si puede ahorrarte horas de investigación y evita sobrediseño.
+- Use Conventional Commits in English, present imperative, and no final punctuation when possible (for example `fix: harden project deletion guard`, `test: cover rebuild progress updates`).
+- Group cohesive changes per commit, including required configs or artifacts.
+- PRs describe problem, solution, tests, and risks (env vars, index rebuild) and involve the RAG owner when applicable.
+- If remote connectivity is missing, do not rewrite or amend local commits: stop and notify the user before attempting pulls or pushes.
 
-- Buenas prácticas
-  - Define claramente contexto, objetivos, restricciones y criterios de éxito.
-  - Solicita riesgos, alternativas y “no hacer” con justificación.
-  - Documenta decisiones y próximos pasos de forma breve y accionable.
-  - Úsalo para dudas con impacto; evita consultas mecánicas.
- - Soluciones robustas, no parches: no aceptes desactivar FKs para operar; si algo requiere limpieza, actualiza el esquema, recrea la BD si es necesario y valida con pruebas.
- - No ejecutes `python app.py` ni levantes la aplicación tú: asume que el usuario la tiene corriendo.
+## Final Rules And Reminders
+
+- Always respond in Spanish.
+- You are in a conda environment, so you should be able to run the application without issues. If you add a new import required by the app, you may install it, but remember to add it to `requirements.txt`. If too many packages are missing, the user may have forgotten to activate the conda environment before calling you; ask in that case.
+- Create or edit the current guides (`Extra/Guias/...`), or create new ones if the topic is too different, for every implemented change worth documenting.
+- Before starting any task, collect all available repository information: review and read **all** guides in `Extra/Guias/`, inspect relevant files, and confirm the current state before proposing or executing changes.
+- Always iterate through reproducible tests and do not stop until the task is fully functional. If unsure or blocked, ask the user.
+- Every implementation must include a new test in `test/` and is not ready until tests are green (run `pytest`).
+- Once the user-requested task is complete and verified stable/valid, ask the user whether to run `git add .` and commit with a clear summary of what was added. Never push; the user does that. Always wait for approval.
+- Do not run git commands (`add`, `commit`, `reset`, `revert`, etc.) unless the user explicitly asks.
+- When adding new functions in `utils`, implement them in the most appropriate existing `.py` file or create a new one if none fits.
+- Never identify yourself as responsible or mention agent names (for example, Codex); focus on actions and results.
+- The application runs from `app.py`, and imports live in `utils`. Respect this.
+- Try to keep files under two thousand lines of code.
+- Visible UI text and code comments must be in English. Guide documents should also be kept in English for this repository.
+
+## External Expert Agent (Internet Access)
+
+- The user has an external agent with internet access that you can request at any time. Use it when expert analysis can save time or avoid outdated decisions. Write a clear prompt, share it with the user to send, and wait for the response before applying changes.
+
+- When to request it
+  - Architecture and design decisions (patterns, boundaries, API contracts).
+  - Serious comparisons of solutions/libraries/MCP servers and their trade-offs.
+  - Security (policies, whitelists/flags, resource limits, audits).
+  - Cross-platform concerns (WSL, macOS, Windows/ConPTY), TTY, signals, performance/robustness.
+  - Dependency choices and roadmaps (avoid obsolete architectures from the start).
+
+- How to use it
+  - Write a clear prompt with context and constraints and give it to the user to send to this agent; wait for its response before changing code.
+  - Ask for actionable deliverables: executive summary, comparison, step-by-step plan, and recommendations.
+  - Do not hesitate to request it if it can save hours of research and avoid overengineering.
+
+- Best practices
+  - Clearly define context, goals, constraints, and success criteria.
+  - Request risks, alternatives, and “do not do” guidance with justification.
+  - Document decisions and next steps briefly and actionably.
+  - Use it for impactful doubts; avoid mechanical consultations.
+- Robust solutions, not patches: do not accept disabling FKs to operate; if cleanup is required, update the schema, recreate the DB if necessary, and validate with tests.
+- Do not run `python app.py` or start the application yourself: assume the user has it running.

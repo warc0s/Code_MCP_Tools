@@ -1,5 +1,5 @@
 """
-CLI de prueba con menús y logs para validar tools interactivas.
+Test CLI with menus and logs for validating interactive tools.
 """
 
 from __future__ import annotations
@@ -22,112 +22,112 @@ def prompt_input(message: str) -> str:
     try:
         return input(message).strip()
     except EOFError:
-        print("\nEntrada terminada. Saliendo.")
+        print("\nInput ended. Exiting.")
         sys.exit(0)
 
 
 def option_greet() -> None:
-    name = prompt_input("¿Cómo te llamas? ")
+    name = prompt_input("What is your name? ")
     if not name:
-        print("Nombre vacío, usando 'anónimo'.")
-        name = "anónimo"
-    print(f"Hola, {name}! Gracias por ayudar a probar la CLI.")
+        print("Empty name, using 'anonymous'.")
+        name = "anonymous"
+    print(f"Hello, {name}! Thanks for helping test the CLI.")
 
 
 def option_choose_color() -> None:
-    colors = ["rojo", "verde", "azul", "amarillo", "naranja"]
-    print("Colores disponibles:")
+    colors = ["red", "green", "blue", "yellow", "orange"]
+    print("Available colors:")
     for idx, color in enumerate(colors, start=1):
         print(f"{idx}) {color}")
-    choice = prompt_input("Elige un color por número: ")
+    choice = prompt_input("Choose a color by number: ")
     try:
         idx = int(choice)
         if idx < 1 or idx > len(colors):
             raise ValueError
         color = colors[idx - 1]
-        print(f"Elegiste: {color}")
+        print(f"You chose: {color}")
     except Exception:
-        print("Selección inválida.")
+        print("Invalid selection.")
 
 
 def option_logs() -> None:
     steps: List[str] = [
-        "Preparando recursos",
-        "Conectando con servicios",
-        "Procesando datos",
-        "Aplicando transformaciones",
-        "Generando salida",
+        "Preparing resources",
+        "Connecting to services",
+        "Processing data",
+        "Applying transformations",
+        "Generating output",
     ]
-    print("Se generarán varios logs de ejemplo. Espera un momento...")
+    print("Several sample logs will be generated. Wait a moment...")
     for step in steps:
-        logging.info("Paso: %s", step)
+        logging.info("Step: %s", step)
         time.sleep(random.uniform(0.1, 0.4))
     for idx in range(3):
         value = random.randint(1, 100)
-        logging.debug("Valor aleatorio %s: %s", idx, value)
-    logging.warning("Advertencia de prueba: esto es solo un test.")
-    logging.error("Error de prueba: simulación controlada.")
-    print("Logs generados. Revisa la salida para validar captura.")
+        logging.debug("Random value %s: %s", idx, value)
+    logging.warning("Test warning: this is only a test.")
+    logging.error("Test error: controlled simulation.")
+    print("Logs generated. Review the output to validate capture.")
 
 
 def option_slow_bursty_logs() -> None:
-    print("Simulando proceso largo con logs a trompicones...")
+    print("Simulating a long process with bursty logs...")
     phases: List[str] = [
-        "Arrancando workers",
-        "Recopilando datos",
-        "Calculando métricas",
-        "Enviando resultados",
+        "Starting workers",
+        "Collecting data",
+        "Calculating metrics",
+        "Sending results",
     ]
     for idx, phase in enumerate(phases, start=1):
-        logging.info("Fase %s: %s", idx, phase)
+        logging.info("Phase %s: %s", idx, phase)
         time.sleep(0.8)
-        if phase == "Recopilando datos":
-            logging.warning("Cola de mensajes creciendo, latencia moderada.")
-        if phase == "Calculando métricas":
-            logging.debug("Batch parcial listo. Esperando siguiente lote.")
+        if phase == "Collecting data":
+            logging.warning("Message queue growing, moderate latency.")
+        if phase == "Calculating metrics":
+            logging.debug("Partial batch ready. Waiting for next batch.")
             time.sleep(1.5)
         time.sleep(0.6)
-    logging.info("Postprocesado final en curso...")
+    logging.info("Final post-processing in progress...")
     for _ in range(3):
-        logging.debug("Pulso de vida %s", random.randint(10_000, 99_999))
+        logging.debug("Heartbeat %s", random.randint(10_000, 99_999))
         time.sleep(random.uniform(0.5, 1.2))
-    logging.error("Fallo simulado: dependencia externa no respondió a tiempo.")
-    print("Proceso largo finalizado con errores simulados. Revisa la salida completa.")
+    logging.error("Simulated failure: external dependency did not respond in time.")
+    print("Long process finished with simulated errors. Review the full output.")
 
 
 def option_submenu() -> None:
     while True:
-        print("\n--- Submenú de flujo ---")
-        print("a) Simular tarea corta")
-        print("b) Simular tarea larga")
-        print("c) Volver")
+        print("\n--- Flow submenu ---")
+        print("a) Simulate short task")
+        print("b) Simulate long task")
+        print("c) Back")
         choice = prompt_input("> ")
         if choice.lower() == "a":
-            print("Tarea corta en progreso...")
+            print("Short task in progress...")
             time.sleep(0.5)
-            print("Tarea corta completada.")
+            print("Short task completed.")
         elif choice.lower() == "b":
-            print("Tarea larga en progreso (2s)...")
+            print("Long task in progress (2s)...")
             time.sleep(2.0)
-            print("Tarea larga completada.")
+            print("Long task completed.")
         elif choice.lower() == "c":
-            print("Regresando al menú principal.")
+            print("Returning to main menu.")
             return
         else:
-            print("Opción no válida en submenú.")
+            print("Invalid option in submenu.")
 
 
 def main() -> None:
     configure_logging()
-    print("CLI de prueba interactiva. Usa números para navegar.")
+    print("Interactive test CLI. Use numbers to navigate.")
     while True:
-        print("\n=== Menú principal ===")
-        print("1) Saludar")
-        print("2) Elegir color")
-        print("3) Generar logs de ejemplo")
-        print("4) Submenú de flujo")
-        print("5) Proceso lento con logs a trompicones")
-        print("q) Salir")
+        print("\n=== Main menu ===")
+        print("1) Greet")
+        print("2) Choose color")
+        print("3) Generate sample logs")
+        print("4) Flow submenu")
+        print("5) Slow process with bursty logs")
+        print("q) Exit")
         choice = prompt_input("> ")
         if choice == "1":
             option_greet()
@@ -140,10 +140,10 @@ def main() -> None:
         elif choice == "5":
             option_slow_bursty_logs()
         elif choice.lower() in {"q", "quit", "exit"}:
-            print("Hasta luego y gracias por probar.")
+            print("Goodbye and thanks for testing.")
             break
         else:
-            print("Opción no reconocida. Intenta de nuevo.")
+            print("Unrecognized option. Try again.")
 
 
 if __name__ == "__main__":

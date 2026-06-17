@@ -1,5 +1,5 @@
 """
-Gestión de la base de datos DuckDB usada como almacén vectorial.
+DuckDB database management for the vector store.
 """
 
 from __future__ import annotations
@@ -65,7 +65,7 @@ class DuckDBManager:
             value = "ON" if enabled else "OFF"
             conn.execute(f"PRAGMA foreign_keys={value};")
         except Exception:
-            # Algunas versiones de DuckDB no soportan PRAGMA foreign_keys; ignoramos
+            # Some DuckDB versions do not support PRAGMA foreign_keys; ignore it.
             pass
 
     def _install_extensions(self) -> None:
@@ -79,23 +79,23 @@ class DuckDBManager:
                     conn.execute(f"INSTALL {extension};")
                     conn.execute(f"LOAD {extension};")
                 except Exception as exc:
-                    # Robustez: sin red o repos bloqueados, continuar sin la extensión
+                    # Robustness: no network or blocked repos should not stop startup.
                     logger.warning(
-                        "DuckDB: no fue posible INSTALL/LOAD de '%s'. Continuando sin la extensión: %s",
+                        "DuckDB: could not INSTALL/LOAD '%s'. Continuing without the extension: %s",
                         extension,
                         exc,
                     )
 
-        # Habilita la persistencia experimental de índices HNSW cuando sea posible
+        # Enable experimental HNSW index persistence when possible.
         try:
             conn.execute("SET hnsw_enable_experimental_persistence = true;")
         except Exception:
             try:
                 conn.execute("PRAGMA hnsw_enable_experimental_persistence=true;")
             except Exception as exc:
-                # No bloquear el rebuild si la PRAGMA no existe
+                # Do not block rebuild if the PRAGMA does not exist.
                 logger.info(
-                    "DuckDB: no se pudo habilitar hnsw_enable_experimental_persistence; los índices HNSW no serán persistentes: %s",
+                    "DuckDB: could not enable hnsw_enable_experimental_persistence; HNSW indexes will not be persistent: %s",
                     exc,
                 )
 
@@ -112,7 +112,7 @@ class DuckDBManager:
         conn.execute("DROP TABLE IF EXISTS chunks;")
         conn.execute("DROP TABLE IF EXISTS docs;")
         conn.execute("DROP TABLE IF EXISTS metadata;")
-        # Nota: projects/items viven en la base SQLite de memoria; sólo se gestiona aquí el esquema RAG
+        # Note: projects/items live in the SQLite memory DB; only the RAG schema is managed here.
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS docs (
@@ -146,16 +146,16 @@ class DuckDBManager:
             );
             """
         )
-        # Índices ligeros sobre columnas pequeñas
+        # Lightweight indexes on small columns.
         conn.execute("CREATE INDEX IF NOT EXISTS idx_docs_url ON docs(url);")
         conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_doc_id ON chunks(doc_id);")
-        # Nota de rendimiento: índices costosos (HNSW y FTS) se difieren hasta después de la carga masiva
-        # usando create_indexes(); así evitamos mantenimiento incremental por fila.
+        # Performance note: expensive indexes (HNSW and FTS) are deferred until after bulk load
+        # through create_indexes(); this avoids incremental per-row maintenance.
 
     def create_indexes(self) -> None:
-        """Crea los índices pesados (HNSW y FTS) tras insertar datos.
+        """Create heavy indexes (HNSW and FTS) after inserting data.
 
-        Es idempotente y segura ante entornos sin extensiones.
+        This is idempotent and safe in environments without extensions.
         """
         conn = self.connection
         try:
@@ -163,14 +163,14 @@ class DuckDBManager:
                 "CREATE INDEX IF NOT EXISTS chunks_embedding_hnsw ON chunks USING hnsw(embedding) WITH (metric='cosine');"
             )
         except Exception:
-            # Si la versión de DuckDB/VSS no soporta persistencia HNSW, continuamos sin índice vectorial
+            # If the DuckDB/VSS version does not support HNSW persistence, continue without a vector index.
             pass
         try:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS chunks_fts_idx ON chunks USING fts(text) WITH (stopwords='english');"
             )
         except Exception:
-            # Si la versión de FTS no soporta esta sintaxis, continuamos sin índice
+            # If the FTS version does not support this syntax, continue without the index.
             pass
         # FKs permanecen activadas; no es necesario togglear para este rebuild
 

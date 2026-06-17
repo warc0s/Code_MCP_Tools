@@ -1,16 +1,20 @@
-# Qué aportan
-- Permiten a un agente/cliente MCP ejecutar scripts y módulos Python (p. ej. `python -m uvicorn`) de forma interactiva: lanzan el proceso, leen salida incremental, detectan si espera entrada y permiten enviar texto línea a línea.
-- Persisten un `session_id` y log opcional en `data/cli_sessions/<id>.log`.
-- Python‑only: no ejecuta shell general ni binarios arbitrarios.
+# What It Provides
 
-## Tools disponibles
-- `python_cli_start(mode, script_path/module_name, args, python_opts, conda_env, workdir, timeout, max_bytes, high_scrollback, stdin_lines)`: inicia una sesión Python (script, módulo o `module_repl`). Puedes preinyectar entradas con `stdin_lines` (una línea por entrada). No ejecuta shell general.
-- `python_cli_send(session_id, text?, stdin_lines?, timeout=1.5, max_bytes=16000)`: envía una línea (`text`) o varias (`stdin_lines`) y devuelve la salida nueva (delta). `text` es opcional.
-- `python_cli_stop(session_id, kill=False)`: interrupción suave (Ctrl+C) y señales al grupo; si `kill=True`, SIGKILL.
-- `python_cli_restart(session_id, timeout=1.5)`: detiene y relanza usando la misma configuración. Primero intenta parada suave; si el proceso sigue vivo escala a `kill=True` y aborta el restart si aun así no puede confirmar la terminación.
+- Lets an agent/MCP client run Python scripts and modules (for example `python -m uvicorn`) interactively: start the process, read incremental output, detect whether it is waiting for input, and send text line by line.
+- Persists a `session_id` and optional log in `data/cli_sessions/<id>.log`.
+- Python-only: it does not run a general shell or arbitrary binaries.
 
-## Configuración
-Activa/desactiva cada tool en `config.yaml`:
+## Available Tools
+
+- `python_cli_start(mode, script_path/module_name, args, python_opts, conda_env, workdir, timeout, max_bytes, high_scrollback, stdin_lines)`: starts a Python session (script, module, or `module_repl`). You can pre-inject input with `stdin_lines` (one line per input). It does not run a general shell.
+- `python_cli_send(session_id, text?, stdin_lines?, timeout=1.5, max_bytes=16000)`: sends one line (`text`) or several (`stdin_lines`) and returns new output (delta). `text` is optional.
+- `python_cli_stop(session_id, kill=False)`: soft interruption (Ctrl+C) and process-group signals; if `kill=True`, SIGKILL.
+- `python_cli_restart(session_id, timeout=1.5)`: stops and relaunches with the same configuration. It first tries a soft stop; if the process is still alive it escalates to `kill=True` and aborts the restart if termination still cannot be confirmed.
+
+## Configuration
+
+Enable/disable each tool in `config.yaml`:
+
 ```yaml
 mcp:
   tools:
@@ -22,35 +26,43 @@ mcp:
     python_cli_restart: true
 ```
 
-### Validación de `conda_env`
-- El nombre del entorno se valida con patrón estricto: letras, dígitos, `_` o `-` (1..64). Ejemplos válidos: `mcp`, `code_tools`, `env-01`.
-- Si no necesitas entorno, omite el campo.
+### `conda_env` Validation
 
-## Cómo usar desde el agente
-1. `python_cli_start` con `mode=script|module|module_repl` (ej: `mode=module, module_name=uvicorn`). Opcional: `conda_env: "mcp"`; `workdir` resuelve rutas relativas del script. Si el script usa `input()`, añade `stdin_lines`.
-2. Usa `python_cli_send` para interactuar (ej. `"1"` o `stdin_lines: ["user", "pass"]`). Lee `awaiting_input`/`alive` antes de enviar más texto.
-3. Si quieres terminar, `python_cli_stop`. Para reiniciar limpio, `python_cli_restart`.
-4. Consulta `log_path` (si los logs están habilitados en config) y el estado (`termination_reason`, `exit_code`, `signal`, `ring_buffer_*`).
+- The environment name is validated with a strict pattern: letters, digits, `_`, or `-` (1..64). Valid examples: `mcp`, `code_tools`, `env-01`.
+- If you do not need an environment, omit the field.
 
-## Limitaciones y recomendaciones
-- Solo Python (script o módulo). Shell general/binaries no están permitidos.
-- Scripts deben estar dentro del repo; rutas fuera o symlinks que escapen serán rechazados. Los errores incluyen `repo_root`, `workdir` y `resolved` para diagnosticar.
-- Las sesiones viven en memoria del proceso; un reinicio del servidor las termina.
-- Sesiones inactivas (≥30 minutos) se limpian automáticamente.
-- Controla `timeout` y `max_bytes` para streams largos; `high_scrollback` activa un ring buffer mayor.
+## How To Use From An Agent
 
-### Pruebas largas con logs intermitentes
-- `test/test_cli_menu.py` incluye una opción lenta con logs a trompicones; útil para validar que `python_cli_send` no cierre la sesión antes de tiempo y que los logs se capturen aunque salgan a pulsos.
+1. Call `python_cli_start` with `mode=script|module|module_repl` (example: `mode=module, module_name=uvicorn`). Optional: `conda_env: "mcp"`; `workdir` resolves relative script paths. If the script uses `input()`, add `stdin_lines`.
+2. Use `python_cli_send` to interact (for example `"1"` or `stdin_lines: ["user", "pass"]`). Read `awaiting_input`/`alive` before sending more text.
+3. When done, call `python_cli_stop`. For a clean restart, call `python_cli_restart`.
+4. Check `log_path` (if logs are enabled in config) and state fields (`termination_reason`, `exit_code`, `signal`, `ring_buffer_*`).
 
-### Simulaciones largas tipo LLM
-- `test/llm_sim_cli.py` ofrece respuesta corta, lenta (~30s) y salida en fragmentos; sirve para comprobar lecturas prolongadas.
-## Estado y diagnósticos
-- Siempre que `alive=false`, `awaiting_input=false`.
-- `termination_reason` puede ser `Running|Exited|Signaled|EOF_on_stdin|UnknownError` con `exit_code`/`signal` cuando aplique.
-- Si ves `EOF_on_stdin` en scripts con `input()`, aporta `stdin_lines` o usa un flujo no interactivo.
-- Timeouts: sesiones pueden finalizar por `Timeout` al superar vida total (30 min por defecto) o inactividad (15 min por defecto). Valores configurables por entorno (`CLI_SESSION_LIFETIME_SEC`, `CLI_IDLE_TIMEOUT_SEC`).
+## Limits And Recommendations
 
-## Entornos conda y ejecución sin shell
-- La tool no usa `bash -lc`; spawnea el intérprete Python directamente con argv.
-- Si pasas `conda_env`, intenta resolver el `python` del entorno con `conda run -n <env> python -c 'import sys; print(sys.executable)'` y lanza ese binario; si falla, cae en `conda run -n <env> python ...` sin shell.
-- Los `requirements` deben estar instalados en el entorno conda elegido para que los scripts/módulos los vean.
+- Python only (script or module). General shell/binaries are not allowed.
+- Scripts must be inside the repo; outside paths or escaping symlinks are rejected. Errors include `repo_root`, `workdir`, and `resolved` for diagnosis.
+- Sessions live in process memory; a server restart terminates them.
+- Inactive sessions (>=30 minutes) are cleaned automatically.
+- Tune `timeout` and `max_bytes` for long streams; `high_scrollback` enables a larger ring buffer.
+
+### Long Tests With Intermittent Logs
+
+- `test/test_cli_menu.py` includes a slow option with bursty logs; it is useful to validate that `python_cli_send` does not close the session too early and that logs are captured even when they arrive in pulses.
+
+### Long LLM-Style Simulations
+
+- `test/llm_sim_cli.py` provides short, slow (~30s), and fragmented output; it helps validate prolonged reads.
+
+## State And Diagnostics
+
+- Whenever `alive=false`, `awaiting_input=false`.
+- `termination_reason` can be `Running|Exited|Signaled|EOF_on_stdin|UnknownError` with `exit_code`/`signal` when applicable.
+- If you see `EOF_on_stdin` in scripts with `input()`, provide `stdin_lines` or use a non-interactive flow.
+- Timeouts: sessions can finish by `Timeout` after total lifetime (30 min by default) or inactivity (15 min by default). Values are configurable by environment (`CLI_SESSION_LIFETIME_SEC`, `CLI_IDLE_TIMEOUT_SEC`).
+
+## Conda Environments And Shell-Free Execution
+
+- The tool does not use `bash -lc`; it spawns the Python interpreter directly with argv.
+- If you pass `conda_env`, it tries to resolve that environment's `python` with `conda run -n <env> python -c 'import sys; print(sys.executable)'` and launches that binary; if this fails, it falls back to `conda run -n <env> python ...` without a shell.
+- `requirements` must be installed in the selected conda environment for scripts/modules to see them.

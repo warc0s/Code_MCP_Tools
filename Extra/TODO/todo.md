@@ -1,3 +1,3 @@
-memoria y cosas para facilitar los /goal
+memory and utilities to make /goal easier
 
-modo intermedio: ni tan claro ni tan oscuro. Modo atardecer?
+intermediate mode: neither too bright nor too dark. Twilight mode?

@@ -26,7 +26,7 @@ def test_patch_doc_unified_diff():
     bootstrap_memory_db(cfg)
     svc = ItemService(cfg)
 
-    # Prepara proyecto e item tipo doc
+    # Prepare project and doc item.
     proj = svc.create_project("patch-proj", name="Patch Project")
     assert proj["slug"] == "patch-proj"
 
@@ -43,7 +43,7 @@ def test_patch_doc_unified_diff():
     )
     assert item.version == 1
 
-    # Cambiamos la segunda línea (Beta -> Beta 2)
+    # Change the second line (Beta -> Beta 2).
     diff = """@@ -2,1 +2,1 @@
 -Beta
 +Beta 2
@@ -58,4 +58,3 @@ def test_patch_doc_unified_diff():
 
     assert updated.version == 2
     assert "Beta 2" in updated.body_md and "Alpha" in updated.body_md and "Gamma" in updated.body_md
-

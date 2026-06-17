@@ -1,19 +1,18 @@
 """
-Gestión de sesiones de CLI interactivas usando pexpect (backend único pexpect-only).
+Interactive CLI session management using pexpect (single pexpect-only backend).
 
-Endurecimientos clave:
-- Drainer en background por sesión que lee del PTY de forma continua y acumula en
-  un ring buffer en memoria, limitado por bytes (best-effort, sin bloquear).
-- `last_activity` real por sesión y limpieza periódica.
-- Señales más robustas: interrupción suave (Ctrl+C) y parada con señales al grupo
-  de procesos; tolera EOF y EIO en macOS.
-- Tamaño de TTY configurable por defecto (reduce wraps raros en CLIs).
+Key hardening:
+- Background drainer per session that continuously reads the PTY and accumulates
+  output in an in-memory ring buffer, byte-limited (best-effort, non-blocking).
+- Real per-session `last_activity` and periodic cleanup.
+- More robust signals: soft interruption (Ctrl+C) and process-group stops;
+  tolerates EOF and EIO on macOS.
+- Configurable default TTY size to reduce odd CLI wrapping.
 
-Notas:
-- La API pública (start_session, send_input, stop_session, restart_session) se
-  mantiene estable. Se añade soporte de `max_bytes` para limitar la lectura por
-  llamada (delta desde el último pull) y se mejora la detección de prompt
-  desacoplándola de los logs.
+Notes:
+- The public API (start_session, send_input, stop_session, restart_session)
+  remains stable. `max_bytes` support was added to limit reads per call
+  (delta since the last pull), and prompt detection is decoupled from logs.
 """
 
 from __future__ import annotations
@@ -36,14 +35,14 @@ import threading
 import re as _re
 
 LOG_DIR = Path("data/cli_sessions")
-# Tamaños y límites por defecto
+# Default sizes and limits.
 DEFAULT_RING_MAX_BYTES = int(os.getenv("CLI_RING_BUFFER_MAX_BYTES", str(512 * 1024)))  # 512 KiB
 DEFAULT_RING_MAX_BYTES_HIGH = int(os.getenv("CLI_RING_BUFFER_MAX_BYTES_HIGH", str(2 * 1024 * 1024)))  # 2 MiB
-READ_CHUNK_BYTES = int(os.getenv("CLI_READ_CHUNK_BYTES", str(32 * 1024)))  # 32 KiB por lectura
-DEFAULT_INACTIVITY_TTL = int(os.getenv("CLI_INACTIVITY_TTL_SEC", str(30 * 60)))  # 30 minutos (GC de sesiones inactivas)
-# Timeouts de sesión (aplican a cualquier modo; recomendados para REPL)
-DEFAULT_SESSION_LIFETIME_SEC = int(os.getenv("CLI_SESSION_LIFETIME_SEC", str(30 * 60)))  # 30 min vida total
-DEFAULT_IDLE_TIMEOUT_SEC = int(os.getenv("CLI_IDLE_TIMEOUT_SEC", str(15 * 60)))  # 15 min sin interacción
+READ_CHUNK_BYTES = int(os.getenv("CLI_READ_CHUNK_BYTES", str(32 * 1024)))  # 32 KiB per read
+DEFAULT_INACTIVITY_TTL = int(os.getenv("CLI_INACTIVITY_TTL_SEC", str(30 * 60)))  # 30 minutes (inactive-session GC)
+# Session timeouts (apply to any mode; recommended for REPL).
+DEFAULT_SESSION_LIFETIME_SEC = int(os.getenv("CLI_SESSION_LIFETIME_SEC", str(30 * 60)))  # 30 min total lifetime
+DEFAULT_IDLE_TIMEOUT_SEC = int(os.getenv("CLI_IDLE_TIMEOUT_SEC", str(15 * 60)))  # 15 min without interaction
 MAX_SESSIONS = int(os.getenv("CLI_MAX_SESSIONS", "8"))
 DEFAULT_TTY_ROWS = int(os.getenv("CLI_TTY_ROWS", "40"))
 DEFAULT_TTY_COLS = int(os.getenv("CLI_TTY_COLS", "120"))
@@ -142,7 +141,7 @@ def _validate_conda_env(name: Optional[str]) -> Optional[str]:
 
 def _detect_prompt(text: str, prompt_pattern: Optional[str] = None) -> bool:
     """
-    Heurística simple para marcar si la CLI está esperando entrada.
+    Simple heuristic to mark whether the CLI is waiting for input.
     """
     stripped = text.rstrip()
     if not stripped:
@@ -152,7 +151,7 @@ def _detect_prompt(text: str, prompt_pattern: Optional[str] = None) -> bool:
             if re.search(prompt_pattern, stripped):
                 return True
         except re.error:
-            # Si el patrón no es válido, caemos a heurística.
+            # If the pattern is invalid, fall back to the heuristic.
             pass
     lines = stripped.splitlines()
     tail = lines[-1]
@@ -180,7 +179,7 @@ def _detect_prompt(text: str, prompt_pattern: Optional[str] = None) -> bool:
         return True
     if any(tail.endswith(suffix) for suffix in prompt_suffixes):
         return True
-    # Si la última línea está vacía pero la penúltima termina en prompt, considerar awaiting_input.
+    # If the last line is empty but the previous one ends in a prompt, treat it as awaiting_input.
     if len(lines) >= 2 and not tail.strip():
         prev = lines[-2]
         if any(prev.endswith(suffix) for suffix in prompt_suffixes):
@@ -191,23 +190,23 @@ def _detect_prompt(text: str, prompt_pattern: Optional[str] = None) -> bool:
 def _build_status_hint(alive: bool, awaiting_input: bool) -> Dict[str, str]:
     if not alive:
         return {
-            "status_hint": "Sesión terminada.",
+            "status_hint": "Session terminated.",
             "next_step": "Restart with python_cli_restart or start a new one with python_cli_start.",
         }
     if awaiting_input:
         return {
-            "status_hint": "Esperando tu entrada.",
+            "status_hint": "Waiting for your input.",
             "next_step": "Send input with python_cli_send.",
         }
     return {
-        "status_hint": "Proceso en curso, aún no pide entrada.",
+        "status_hint": "Process is running and is not asking for input yet.",
         "next_step": "Call python_cli_send again (empty text allowed) after a few seconds to read more output.",
     }
 
 
 def _enrich_hints(hints: Dict[str, str], output: str, conda_env: Optional[str]) -> Dict[str, str]:
     """
-    Añade orientación contextual sobre fallos comunes (dependencias o red).
+    Add contextual guidance for common failures (dependencies or network).
     """
     if not output:
         return hints
@@ -221,18 +220,18 @@ def _enrich_hints(hints: Dict[str, str], output: str, conda_env: Optional[str]) 
 
     if dependency_issue:
         advice.append(
-            "Si falta algún paquete, pregunta si debes usar otro entorno conda (parámetro conda_env) o instalarlo antes de relanzar."
+            "If a package is missing, ask whether to use another conda environment (conda_env parameter) or install it before relaunching."
         )
     if network_issue:
         advice.append(
-            "Si el script necesita internet (LLM/APIs), consulta si puedes lanzarlo con permisos de red o cómo habilitar el acceso."
+            "If the script needs internet (LLM/APIs), ask whether it can be launched with network permissions or how to enable access."
         )
     if eof_issue:
         advice.append(
-            "Se detectó EOF al leer entrada; usa stdin_lines para enviar entradas iniciales o confirma que el comando tenga TTY disponible."
+            "EOF was detected while reading input; use stdin_lines to send initial input or confirm the command has a TTY available."
         )
     if conda_env and (dependency_issue or network_issue or eof_issue):
-        advice.append(f"Usa conda_env='{conda_env}' si ese es el entorno esperado.")
+        advice.append(f"Use conda_env='{conda_env}' if that is the expected environment.")
 
     if advice:
         combined = " ".join(advice)
@@ -253,7 +252,7 @@ class CLISession:
     batch_queries: Optional[list[str]] = None
     prompt_pattern: Optional[str] = None
     created_at: float = field(default_factory=time.time)
-    # Ring buffer (pendiente de enviar al cliente) y sincronización
+    # Ring buffer (pending to send to the client) and synchronization.
     pending_chunks: deque[str] = field(default_factory=deque)
     pending_bytes: int = 0
     max_buffer_bytes: int = DEFAULT_RING_MAX_BYTES
@@ -263,7 +262,7 @@ class CLISession:
     reader_thread: Optional[threading.Thread] = None
     stop_event: threading.Event = field(default_factory=threading.Event)
     lock: threading.Lock = field(default_factory=threading.Lock)
-    # Campos auxiliares
+    # Auxiliary fields.
     last_output_ts: float = 0.0
     last_send_ts: float = 0.0
     ring_truncated: bool = False
@@ -286,7 +285,7 @@ class CLISession:
             with self.logfile_path.open("a", encoding="utf-8") as handle:
                 handle.write(text)
         except Exception:
-            # No interferir con el flujo si fallan los logs.
+            # Do not interfere with the flow if logging fails.
             pass
 
     def append_output(self, text: str) -> None:
@@ -295,7 +294,7 @@ class CLISession:
         with self.lock:
             self.pending_chunks.append(text)
             self.pending_bytes += len(text.encode("utf-8", errors="ignore"))
-            # Recorta por tamaño máximo, descartando lo más antiguo
+            # Trim to maximum size, discarding oldest data.
             while self.pending_bytes > self.max_buffer_bytes and self.pending_chunks:
                 old = self.pending_chunks.popleft()
                 dropped = len(old.encode("utf-8", errors="ignore"))
@@ -307,17 +306,17 @@ class CLISession:
                 self.ring_truncated = True
 
     def pull_output(self, max_bytes: int) -> str:
-        """Devuelve y limpia hasta max_bytes de la cola pendiente.
+        """Return and clear up to max_bytes from the pending queue.
 
-        Si hay más de max_bytes pendientes, se devuelven los primeros max_bytes y
-        se conserva el excedente para lecturas futuras.
+        If more than max_bytes is pending, return the first max_bytes and keep
+        the excess for future reads.
         """
         with self.lock:
             if self.pending_bytes <= 0 or not self.pending_chunks:
                 return ""
             out_parts: list[str] = []
             budget = max(1, int(max_bytes))
-            # Consumir trozos mientras haya presupuesto
+            # Consume chunks while there is budget.
             while self.pending_chunks and budget > 0:
                 chunk = self.pending_chunks[0]
                 chunk_bytes = len(chunk.encode("utf-8", errors="ignore"))
@@ -327,8 +326,8 @@ class CLISession:
                     self.pending_bytes -= chunk_bytes
                     budget -= chunk_bytes
                 else:
-                    # Tomar una porción del chunk y dejar el resto en cabeza
-                    # Convertimos a bytes para cortar exacto por bytes y decodificamos tolerante
+                    # Take a chunk slice and keep the rest at the head.
+                    # Convert to bytes for exact slicing and decode tolerantly.
                     raw = chunk.encode("utf-8", errors="ignore")
                     part = raw[:budget]
                     rest = raw[budget:]
@@ -347,18 +346,18 @@ SESSIONS: Dict[str, CLISession] = {}
 
 def _start_reader_thread(session: CLISession) -> None:
     """
-    Inicia un hilo lector que drena el PTY de la sesión y vuelca en el ring buffer.
-    Maneja EOF y EIO (común en ptys al cerrar) como fin normal.
+    Start a reader thread that drains the session PTY into the ring buffer.
+    Treat EOF and EIO (common in PTYs on close) as normal termination.
     """
     def _reader() -> None:
         try:
-            # Ajuste de tamaño del TTY para reducir wraps raros
+            # Adjust TTY size to reduce odd wrapping.
             try:
                 session.process.setwinsize(session.rows, session.cols)
             except Exception:
                 pass
             while not session.stop_event.is_set():
-                # Si el proceso ya no está vivo, intentamos una última lectura y salimos
+                # If the process is no longer alive, try one final read and exit.
                 if not session.is_alive():
                     try:
                         chunk = session.process.read_nonblocking(size=READ_CHUNK_BYTES, timeout=0.2)
@@ -370,7 +369,7 @@ def _start_reader_thread(session: CLISession) -> None:
                         pass
                     except OSError as exc:
                         if getattr(exc, "errno", None) == errno.EIO:
-                            # Tratar EIO como EOF del PTY
+                            # Treat EIO as PTY EOF.
                             pass
                     break
                 try:
@@ -380,10 +379,10 @@ def _start_reader_thread(session: CLISession) -> None:
                         if session.log_enabled:
                             session.append_log(chunk)
                     else:
-                        # Nada leído, pequeño respiro
+                        # Nothing read; short pause.
                         time.sleep(0.05)
                 except pexpect.TIMEOUT:
-                    # Sin datos este ciclo
+                    # No data in this cycle.
                     continue
                 except pexpect.EOF:
                     break
@@ -391,7 +390,7 @@ def _start_reader_thread(session: CLISession) -> None:
                     if getattr(exc, "errno", None) == errno.EIO:
                         session.eio_error = True
                         break
-                    # Otros errores: evitar bloquear el hilo
+                    # Other errors: avoid blocking the thread.
                     break
         finally:
             session.stop_event.set()
@@ -425,20 +424,20 @@ def _resolve_workdir(workdir: Optional[str]) -> Optional[str]:
 
 def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]:
     """
-    Asegura que la ruta del script (si aplica) sea absoluta y exista.
+    Ensure the script path (when applicable) is absolute and exists.
     """
     if not tokens:
         return tokens
 
     script_index: Optional[int] = None
-    # Caso directo: se invoca el intérprete con un script .py directamente
+    # Direct case: the interpreter is invoked with a .py script directly.
     if tokens[0].endswith(".py"):
         script_index = 0
-    # Caso 'python ... <script>.py ...' → localizar el primer token .py
+    # 'python ... <script>.py ...' case: locate the first .py token.
     elif tokens[0].startswith("python"):
         for i in range(1, len(tokens)):
             tok = tokens[i]
-            # Evitar flags como -c/-m/-u etc.
+            # Avoid flags such as -c/-m/-u.
             if tok.startswith("-"):
                 continue
             if tok.endswith(".py"):
@@ -464,7 +463,7 @@ def _resolve_script_path(tokens: list[str], workdir: Optional[str]) -> list[str]
             return tokens
 
     raise FileNotFoundError(
-        f"No se encontró el script {script_candidate}. Ajusta workdir, usa ruta absoluta o corrige el comando."
+        f"Script {script_candidate} not found. Adjust workdir, use an absolute path, or fix the command."
     )
 
 
@@ -496,36 +495,36 @@ def _resolve_python_executable(conda_env: Optional[str]) -> str:
 
 def _prepare_command(command: str, conda_env: Optional[str], workdir: Optional[str], batch_queries: Optional[list[str]]) -> Tuple[str, list[str]]:
     """
-    Construye (executable, argv) para spawn sin shell.
+    Build (executable, argv) for shell-free spawn.
     """
     try:
         tokens = shlex.split(command)
     except ValueError as exc:
-        raise ValueError("El comando contiene comillas o escapes inválidos.") from exc
+        raise ValueError("Command contains invalid quotes or escapes.") from exc
     tokens = _resolve_script_path(tokens, workdir)
     if not tokens:
-        raise ValueError("Comando vacío tras parseo.")
+        raise ValueError("Command is empty after parsing.")
     first = tokens[0]
     pyexec = _resolve_python_executable(conda_env)
     if pyexec.startswith("conda:run:-n:"):
         envname = pyexec.split(":")[-1]
         return "conda", ["run", "-n", envname] + tokens
-    # Replace python front if present
+    # Replace python front if present.
     if first in {"python", "python3"} or first.endswith("python") or first.endswith("python3"):
         return pyexec, tokens[1:]
     if first.endswith(".py"):
         return pyexec, tokens
-    # Otherwise return as-is (should still be Python-only by policy)
+    # Otherwise return as-is (should still be Python-only by policy).
     return first, tokens[1:]
 
 
 def _cleanup_sessions(max_age_seconds: int = DEFAULT_INACTIVITY_TTL) -> None:
     """
-    Cierra procesos muertos o muy antiguos para evitar fugas y cuelgues.
+    Close dead or very old processes to avoid leaks and hangs.
     """
     now = time.time()
     for session_id, session in list(SESSIONS.items()):
-        # Usar last_activity para GC más justo
+        # Use last_activity for fairer GC.
         expired = (now - session.last_activity) > max_age_seconds
         alive = False
         try:
@@ -533,7 +532,7 @@ def _cleanup_sessions(max_age_seconds: int = DEFAULT_INACTIVITY_TTL) -> None:
         except Exception:
             alive = False
 
-        # Gracia: no borrar por 'not alive' si la sesión es muy reciente
+        # Grace: do not delete for 'not alive' if the session is very recent.
         if not expired and not alive:
             age = now - getattr(session, "created_at", now)
             if age < DEFAULT_CLEANUP_GRACE_SEC:
@@ -555,7 +554,7 @@ def _timeout_kill(session: CLISession, grace_sec: float = 2.0) -> None:
         return
     session.killed_by_timeout = True
     try:
-        # Señal suave al grupo si es posible
+        # Soft signal to the group when possible.
         try:
             pgid = os.getpgid(session.process.pid)
         except Exception:
@@ -591,23 +590,23 @@ def _drain_output_pull(
     stop_on_first_data: bool = True,
 ) -> Tuple[str, bool]:
     """
-    Espera hasta `timeout` para acumular salida nueva en el ring buffer y devuelve
-    hasta `max_bytes` del delta pendiente. Marca awaiting_input por heurística.
+    Wait up to `timeout` to accumulate new output in the ring buffer and return
+    up to `max_bytes` from the pending delta. Marks awaiting_input by heuristic.
     """
     deadline = time.time() + max(0.0, float(timeout))
-    # Espera activa breve: sal si ya hay datos o al expirar
+    # Short active wait: exit once data exists or on expiry.
     while time.time() < deadline:
         with session.lock:
             have_data = session.pending_bytes > 0
         if have_data and stop_on_first_data:
             break
-        # Si el proceso ya terminó y no hay datos, salir
+        # If the process already ended and there is no data, exit.
         if not session.is_alive():
             break
         time.sleep(0.05)
     text = session.pull_output(max_bytes=max_bytes)
     awaiting_input = False
-    # awaiting_input solo confiable en REPL (prompt >>> o ...)
+    # awaiting_input is only reliable in REPL (prompt >>> or ...).
     if text and session.is_repl:
         try:
             PROMPT_RE = _re.compile(r"(?m)^(>>> |\.\.\. )")
@@ -671,22 +670,22 @@ def start_session(
     ring_max_bytes: Optional[int] = None,
 ) -> Dict[str, object]:
     """
-    Inicia una sesión CLI interactiva y devuelve la salida inicial.
+    Start an interactive CLI session and return initial output.
     """
     _cleanup_sessions()
     if len(SESSIONS) >= MAX_SESSIONS:
-        raise RuntimeError("Número máximo de sesiones alcanzado. Cierra alguna antes de abrir otra.")
+        raise RuntimeError("Maximum number of sessions reached. Close one before opening another.")
     cleaned = (command or "").strip()
     if not cleaned:
-        raise ValueError("Debes proporcionar un comando para iniciar la sesión.")
+        raise ValueError("You must provide a command to start the session.")
     if batch_queries is not None:
         if not isinstance(batch_queries, list) or not all(isinstance(item, str) for item in batch_queries):
-            raise ValueError("batch_queries debe ser una lista de cadenas.")
+            raise ValueError("batch_queries must be a list of strings.")
     if stdin_lines is not None:
         if not isinstance(stdin_lines, list) or not all(isinstance(item, str) for item in stdin_lines):
-            raise ValueError("stdin_lines debe ser una lista de cadenas.")
+            raise ValueError("stdin_lines must be a list of strings.")
     if prompt_pattern is not None and not isinstance(prompt_pattern, str):
-        raise ValueError("prompt_pattern debe ser una cadena con una expresión regular.")
+        raise ValueError("prompt_pattern must be a string with a regular expression.")
     # Validate conda env defensively (prevents shell injection and common mistakes)
     try:
         conda_env = _validate_conda_env(conda_env)
@@ -696,7 +695,7 @@ def start_session(
             f"{exc} If you do not need a conda env, omit the field. If you do, create it first and try again."
         ) from exc
 
-    # Siempre spawn directo para permitir stdin_lines sin shell
+    # Always spawn directly to allow stdin_lines without a shell.
     resolved_workdir = _resolve_workdir(workdir)
     exec_cmd, cmd_args = _prepare_command(
         cleaned, conda_env=conda_env, workdir=resolved_workdir, batch_queries=None
@@ -721,7 +720,7 @@ def start_session(
                 preexec_fn=preexec_fn,
             )
 
-        # Crear nuevo grupo de procesos (POSIX) para señales al grupo
+        # Create a new process group (POSIX) for group signals.
         preexec = None
         try:
             preexec = os.setsid
@@ -744,8 +743,8 @@ def start_session(
             process_group_created = False
     except (pexpect.exceptions.ExceptionPexpect, OSError) as exc:
         error_hint = (
-            "No se pudo lanzar el comando. Verifica el comando, revisa el entorno conda (usa solo letras/dígitos/_/-) "
-            "o instala dependencias antes de reintentar."
+            "Could not launch the command. Verify the command, check the conda environment "
+            "(use only letters/digits/_/-), or install dependencies before retrying."
         )
         raise RuntimeError(error_hint) from exc
     session = CLISession(
@@ -765,9 +764,9 @@ def start_session(
     if ring_max_bytes and isinstance(ring_max_bytes, int) and ring_max_bytes > 0:
         session.max_buffer_bytes = int(ring_max_bytes)
     SESSIONS[session_id] = session
-    # Ajustar TTY y arrancar drainer
+    # Adjust TTY and start drainer.
     _start_reader_thread(session)
-    # Preinyectar líneas en stdin si procede
+    # Pre-inject stdin lines when provided.
     if stdin_lines:
         for line in stdin_lines:
             try:
@@ -776,7 +775,7 @@ def start_session(
                 session.mark_activity()
             except Exception:
                 break
-    # Esperar un poco y devolver delta acumulado
+    # Wait briefly and return accumulated delta.
     output, awaiting_input = _drain_output_pull(
         session,
         timeout=timeout,
@@ -816,14 +815,14 @@ def send_input(
     timeout: float = 1.5,
     max_bytes: int = 16000,
 ) -> Dict[str, object]:
-    # Buscar primero sin limpiar para evitar borrar una sesión recién creada por error
+    # Look up first without cleanup to avoid deleting a freshly created session by mistake.
     session = SESSIONS.get(session_id)
     if not session:
-        # Hacer una limpieza y reintentar localizar la sesión (un solo intento)
+        # Cleanup and try to locate the session again (single retry).
         _cleanup_sessions()
         session = SESSIONS.get(session_id)
     if not session:
-        raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
+        raise ValueError("Session not found. Start a session before sending input.")
     # Enforce lifetime/idle timeouts before interacting
     now = time.time()
     idle_anchor = session.last_send_ts or session.created_at
@@ -900,9 +899,9 @@ def send_lines(
         _cleanup_sessions()
         session = SESSIONS.get(session_id)
     if not session:
-        raise ValueError("Sesión no encontrada. Inicia una sesión antes de enviar entrada.")
+        raise ValueError("Session not found. Start a session before sending input.")
     if not isinstance(lines, list) or not all(isinstance(x, str) for x in lines):
-        raise ValueError("stdin_lines debe ser una lista de cadenas.")
+        raise ValueError("stdin_lines must be a list of strings.")
     # Enforce timeouts first
     now = time.time()
     idle_anchor = session.last_send_ts or session.created_at
@@ -970,17 +969,17 @@ def send_lines(
 def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict[str, object]:
     session = SESSIONS.get(session_id)
     if not session:
-        raise ValueError("Sesión no encontrada.")
+        raise ValueError("Session not found.")
     if session.is_alive():
         try:
-            # Intento de parada suave: Ctrl+C al TTY
+            # Soft stop attempt: Ctrl+C to the TTY.
             if not kill:
                 try:
                     session.process.sendintr()
                 except Exception:
                     pass
                 time.sleep(0.2)
-            # Señales al grupo de procesos para asegurar cierre de hijos
+            # Process-group signals to ensure child processes close.
             try:
                 pgid = os.getpgid(session.process.pid)
                 if not session.process_group_created:
@@ -988,13 +987,13 @@ def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict
                 if kill:
                     os.killpg(pgid, signal.SIGKILL)
                 else:
-                    # Secuencia suave: SIGHUP -> SIGTERM
+                    # Soft sequence: SIGHUP -> SIGTERM.
                     os.killpg(pgid, signal.SIGHUP)
                     time.sleep(0.15)
                     if session.is_alive():
                         os.killpg(pgid, signal.SIGTERM)
             except Exception:
-                # Fallback: matar solo el pid
+                # Fallback: kill only the PID.
                 try:
                     if kill:
                         os.kill(session.process.pid, signal.SIGKILL)
@@ -1020,7 +1019,7 @@ def stop_session(session_id: str, kill: bool = False, drop: bool = True) -> Dict
             session.process.close(force=True)
         except Exception:
             pass
-    # Intentar devolver delta pendiente final (si lo hubiera)
+    # Try to return final pending delta when available.
     output, _ = _drain_output_pull(session, timeout=0.2, max_bytes=8000)
     term_reason, exit_code, sig = _derive_termination(session, output)
     hints = _enrich_hints(
@@ -1055,7 +1054,7 @@ def restart_session(
 ) -> Dict[str, object]:
     session = SESSIONS.get(session_id)
     if not session:
-        raise ValueError("Sesión no encontrada.")
+        raise ValueError("Session not found.")
     original_command = session.command
     original_conda = session.conda_env
     original_workdir = session.workdir

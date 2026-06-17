@@ -1,5 +1,5 @@
 """
-Herramientas de búsqueda sobre DuckDB para el RAG.
+Search utilities over DuckDB for RAG.
 """
 
 from __future__ import annotations
@@ -74,18 +74,18 @@ class Retriever:
         except Exception:
             self._fts_available = False
         if not self._fts_available:
-            logger.info("FTS no disponible; se usará fallback léxico basado en LIKE.")
+            logger.info("FTS unavailable; LIKE-based lexical fallback will be used.")
         return self._fts_available
 
     def _ensure_query(self, query: str) -> str:
         cleaned = (query or "").strip()
         if not cleaned:
-            logger.warning("Se recibió una consulta vacía.")
-            raise ValueError("La consulta no puede estar vacía.")
+            logger.warning("Received an empty query.")
+            raise ValueError("Query cannot be empty.")
         if self.config.force_english_queries and not cleaned.isascii():
-            logger.warning("Consulta rechazada por no ser ASCII: %s", query)
-            raise ValueError("Esta base espera consultas en inglés para mantener la calidad del RAG.")
-        logger.debug("Consulta normalizada: %s", cleaned)
+            logger.warning("Rejected non-ASCII query: %s", query)
+            raise ValueError("This index expects English queries to preserve RAG quality.")
+        logger.debug("Normalized query: %s", cleaned)
         return cleaned
 
     def _normalize(self, candidates: List[Dict[str, Any]]) -> Dict[str, float]:
@@ -112,11 +112,11 @@ class Retriever:
 
     def _dense_candidates(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         top = _resolve_top_k(top_k, self.config.dense_topk)
-        logger.debug("Búsqueda densa: query=%s, top_k=%s", query, top)
+        logger.debug("Dense search: query=%s, top_k=%s", query, top)
         try:
             vector = self._generate_embeddings(query)
         except Exception:
-            logger.exception("Fallo generando embeddings para la consulta densa: %s", query)
+            logger.exception("Failed to generate embeddings for dense query: %s", query)
             raise
         try:
             rows = self.connection.execute(
@@ -139,10 +139,10 @@ class Retriever:
                 [vector, vector, top],
             ).fetchall()
         except Exception as exc:
-            # Fallback robusto: si el operador vectorial no está disponible (p. ej., VSS no cargado),
-            # calculamos similitud coseno en Python sobre una muestra acotada.
+            # Robust fallback: if the vector operator is unavailable (for example, VSS not loaded),
+            # compute cosine similarity in Python over a bounded sample.
             logger.warning(
-                "Fallo búsqueda densa con VSS; usando fallback en memoria (parcial): %s",
+                "Dense search with VSS failed; using partial in-memory fallback: %s",
                 exc,
             )
             sample_size = max(200, min(top * 50, 1000))
@@ -165,7 +165,7 @@ class Retriever:
                     [sample_size],
                 ).fetchall()
             except Exception:
-                logger.exception("Error ejecutando el fallback de búsqueda densa.")
+                logger.exception("Error running dense search fallback.")
                 raise
             rows = []
             for row in sample_rows:
@@ -193,7 +193,7 @@ class Retriever:
                         list(embedding),
                     )
                 )
-            # Ordenar por score y truncar al top
+            # Sort by score and truncate to top.
             rows = sorted(rows, key=lambda r: float(r[7]), reverse=True)[:top]
         candidates = []
         for row in rows:
@@ -222,12 +222,12 @@ class Retriever:
                 }
             )
         if not candidates:
-            logger.info("Búsqueda densa sin resultados para query=%s", query)
+            logger.info("Dense search returned no results for query=%s", query)
         return candidates
 
     def _lexical_candidates(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         top = _resolve_top_k(top_k, self.config.lexical_topk)
-        logger.debug("Búsqueda léxica: query=%s, top_k=%s", query, top)
+        logger.debug("Lexical search: query=%s, top_k=%s", query, top)
         rows: List[Any] = []
         if self._check_fts_available():
             try:
@@ -253,14 +253,14 @@ class Retriever:
                     [query, top],
                 ).fetchall()
             except Exception:
-                logger.warning("Error usando FTS para la consulta léxica; se usará fallback LIKE hasta reinicio.")
+                logger.warning("Error using FTS for lexical query; LIKE fallback will be used until restart.")
                 self._fts_available = False
                 rows = []
         if not rows:
-            # Fallback: si FTS no está disponible, usar un ranking simple por coincidencias LIKE
+            # Fallback: if FTS is unavailable, use simple ranking by LIKE matches.
             tokens = [t for t in (query or "").lower().split() if t]
             if not tokens:
-                logger.info("Consulta léxica sin tokens tras normalización: %s", query)
+                logger.info("Lexical query has no tokens after normalization: %s", query)
                 return []
             like_params = [f"%{_escape_like_token(t)}%" for t in tokens]
             score_expr = " + ".join(["CASE WHEN lower(c.text) LIKE ? ESCAPE '\\' THEN 1 ELSE 0 END" for _ in tokens])
@@ -310,19 +310,19 @@ class Retriever:
                 }
             )
         if not candidates:
-            logger.info("Búsqueda léxica sin resultados para query=%s", query)
+            logger.info("Lexical search returned no results for query=%s", query)
         return candidates
 
     def dense_search(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         cleaned = self._ensure_query(query)
         candidates = self._dense_candidates(cleaned, top_k=top_k)
-        logger.info("Consulta densa '%s' → %d candidatos.", cleaned, len(candidates))
+        logger.info("Dense query '%s' -> %d candidates.", cleaned, len(candidates))
         return self._strip_internal(candidates)
 
     def lexical_search(self, query: str, top_k: Optional[int] = None) -> List[Dict[str, Any]]:
         cleaned = self._ensure_query(query)
         candidates = self._lexical_candidates(cleaned, top_k=top_k)
-        logger.info("Consulta léxica '%s' → %d candidatos.", cleaned, len(candidates))
+        logger.info("Lexical query '%s' -> %d candidates.", cleaned, len(candidates))
         return self._strip_internal(candidates)
 
     def _apply_mmr(self, candidates: List[Dict[str, Any]], limit: Optional[int] = None) -> List[Dict[str, Any]]:
@@ -393,14 +393,14 @@ class Retriever:
         for item in selected:
             item["score"] = final_norm.get(item["chunk_id"], item["score"])
 
-        logger.info("Consulta híbrida '%s' → %d resultados finales.", cleaned, len(selected))
+        logger.info("Hybrid query '%s' -> %d final results.", cleaned, len(selected))
         return self._strip_internal(selected)
 
     def chunks_for_url(self, url: str) -> List[Dict[str, Any]]:
         cleaned = (url or "").strip()
         if not cleaned:
-            logger.warning("Solicitud de chunks sin URL.")
-            raise ValueError("Debes proporcionar una URL.")
+            logger.warning("Chunk request without URL.")
+            raise ValueError("You must provide a URL.")
         rows = self.connection.execute(
             """
             SELECT
@@ -434,9 +434,9 @@ class Retriever:
                 }
             )
         if not results:
-            logger.warning("No se encontraron chunks para la URL: %s", cleaned)
-            raise ValueError("No se encontraron chunks para la URL indicada.")
-        logger.info("URL '%s' → %d chunks recuperados.", cleaned, len(results))
+            logger.warning("No chunks found for URL: %s", cleaned)
+            raise ValueError("No chunks found for the requested URL.")
+        logger.info("URL '%s' -> %d chunks retrieved.", cleaned, len(results))
         return results
 
 

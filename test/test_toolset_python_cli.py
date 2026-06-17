@@ -53,4 +53,4 @@ def test_build_python_command_rejects_prefix_confusion_workdir(tmp_path, monkeyp
             "script_path": "ok.py",
             "python_opts": {"unbuffered": True},
         })
-    assert "Workdir fuera del repo" in str(ei.value)
+    assert "Workdir outside repository" in str(ei.value)

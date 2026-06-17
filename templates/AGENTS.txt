@@ -1,99 +1,110 @@
 # Repository Guidelines
 
-## Flujo de trabajo
-- Antes de aplicar cualquier cambio, revisa el contexto relacionado y los flujos afectados para detectar regresiones.
+## Workflow
+
+- Before applying any change, review the related context and affected flows to detect regressions.
 
 ## Engineering Principles
-- **Work doggedly.** Mantén autonomía mientras haya progreso; si paras, explica por qué.
-- **Work smart.** Ante bugs, retrocede, considera causas y añade logging para validar supuestos.
-- **Check your work.** Prueba cada bloque nuevo y, en procesos largos, revisa logs tras 30s para confirmar avance.
-- **Be cautious with terminal commands.** Lanza solo comandos que terminen solos; los persistentes van con `nohup` u otro wrapper y evita scripts colgados.
-- **Robustez total.** Cada solución debe contemplar explícitamente edge cases y fallos operativos; prioriza mensajes claros y defensivos ante dependencias, red o inputs inesperados.
 
-## Validación y pruebas
-- Por cada funcionalidad nueva añade un test en `test/` y ejecútalo con `pytest`.
-- Itera hasta funcional: si algo falla en tests o en la UI, corrige y repite ciclo (code → pytest) hasta conseguir estabilidad.
+- **Work doggedly.** Stay autonomous while progress is possible; if you stop, explain why.
+- **Work smart.** When debugging, step back, consider root causes, and add logging to validate assumptions.
+- **Check your work.** Test every new block and, in long-running processes, review logs after 30s to confirm progress.
+- **Be cautious with terminal commands.** Only launch commands that terminate by themselves; persistent commands must use `nohup` or another wrapper, and avoid hanging scripts.
+- **Total robustness.** Every solution must explicitly account for edge cases and operational failures; prioritize clear, defensive messages for dependencies, network, or unexpected inputs.
 
-## Coding Style & Naming Conventions
-- Usa indentación de 4 espacios, snake_case y constantes en mayúsculas; mantén logs concisos.
-- Añade typing y docstrings orientados; extrae helpers antes de anidar lógica.
-- Configura vía YAML o entorno; evita secretos hardcodeados.
+## Validation And Tests
 
-## Commit & Pull Request Guidelines
-- Alinea commits con el historial: resúmenes breves en presente y en español sin puntuación final (ej. `mayor higiene`).
-- Agrupa cambios cohesivos por commit, incluyendo configs o artefactos necesarios.
-- Si falta conectividad con el remoto, no reescribas ni enmiendes commits locales: detente y avisa al usuario antes de intentar pulls o pushes.
+- For every new feature, add a test in `test/` and run it with `pytest`.
+- Iterate until functional: if tests or UI checks fail, fix and repeat the cycle (code -> pytest) until stable.
 
-## Normas y recordatorios finales
-- Respondes siempre en español
-- Estas en un entorno conda asi que deberias ser capaz de ejecutar la aplicacion sin problemas. Si añades un nuevo import que deba usar la aplicacion, puedes instalarlo pero recuerda añadirlo al requirements.txt. Si ves que faltan demasiados paquetes, igual el usuario se olvido de activar el entorno conda antes de llamarte, puedes preguntarle en dicho caso
-- Crea o edita las guias actuales (Extra/Guias/...), o bien genera nuevas si es algo demasiado diferente, con cada cambio que implementes que consideres digno de anotar
-- Antes de empezar cualquier tarea, recopila toda la información disponible sobre el repositorio: revisa, lee **todas** las guías de `Extra/Guias/`, inspecciona los archivos relevantes y confirma el estado actual antes de proponer o ejecutar cambios.
-- Itera siempre guiandote por las validaciones manuales y no te detengas hasta que sea completamente funcional. En caso de duda o problemas, consulta al usuario.
-- Una vez finalices la tarea que te ha encargado el usuario y se haya comprobado que es estable y valida, preguntale al usuario si debes hacer "git add ." y commit con un comentario aclaratorio de lo añadido. Tu jamás harás push, el usuario lo hace, solo debes add y commit. SIEMPRE ESPERANDO APROBACION DEL USUARIO.
-- No ejecutes comandos git (add, commit, reset, revert, etc.) salvo que el usuario lo pida explícitamente.
-- A la hora de añadir nuevas funciones y demas en 'utils', implementalas en el .py que consideres mas adecuado O BIEN escribe uno nuevo si ninguno se amolda a lo que vas a programar.
-- Nunca te identifiques como responsable ni menciones nombres de agentes (p.ej., Codex); enfócate en describir acciones y resultados.
-- La aplicación se ejecuta desde `app.py` y los imports estan en 'utils'. Respeta esto.
-- Trata que los archivos no superen las dos mil lineas de codigo
-- Cuando añadas textos visibles en la UI o comentarios en el código, escribe en inglés (los documentos de guía pueden seguir en español).
+## Coding Style And Naming Conventions
 
-## Agente experto externo (con acceso a internet)
+- Use 4-space indentation, snake_case, and uppercase constants; keep logs concise.
+- Add typing and targeted docstrings; extract helpers before nesting logic.
+- Configure through YAML or environment; avoid hardcoded secrets.
 
-- El usuario dispone de un agente externo con acceso a internet que puedes solicitar en cualquier momento. Úsalo cuando un análisis experto pueda ahorrarte tiempo o evitar decisiones obsoletas. Escribe un prompt claro, compártelo con el usuario para que lo envíe y espera su respuesta antes de aplicar cambios.
+## Commit And Pull Request Guidelines
 
-- Cuándo pedirlo
-  - Decisiones de arquitectura y diseño (patrones, límites, contratos de API).
-  - Comparativas de soluciones, librerías o servidores MCP y sus trade‑offs.
-  - Seguridad (políticas, whitelists/flags, límites de recursos, auditoría).
-  - Cross‑platform (WSL, macOS, Windows/ConPTY), TTY, señales, rendimiento.
-  - Elección de dependencias y roadmaps (evitar arquitecturas obsoletas desde el inicio).
+- Use Conventional Commits in English, present imperative, and no final punctuation when possible (for example `fix: harden project deletion guard`).
+- Group cohesive changes per commit, including required configs or artifacts.
+- If remote connectivity is missing, do not rewrite or amend local commits: stop and notify the user before attempting pulls or pushes.
 
-- Cómo usarlo
-  - Escribe un prompt claro con contexto, objetivos y restricciones.
-  - Entrégalo al usuario para que lo pegue en un LLM con acceso a internet y espera la respuesta antes de cambiar código.
-  - Pide entregables accionables: resumen ejecutivo, comparativa, plan por pasos y recomendaciones.
+## Final Rules And Reminders
 
-- Buenas prácticas
-  - Define claramente contexto, objetivos y criterios de éxito.
-  - Solicita riesgos, alternativas y “no hacer” con justificación.
-  - Documenta decisiones y próximos pasos de forma breve y accionable.
-  - Úsalo para dudas con impacto; evita consultas mecánicas.
+- Always respond in Spanish.
+- You are in a conda environment, so you should be able to run the application without issues. If you add a new import required by the app, you may install it, but remember to add it to `requirements.txt`. If too many packages are missing, the user may have forgotten to activate the conda environment before calling you; ask in that case.
+- Create or edit the current guides (`Extra/Guias/...`), or create new ones if the topic is too different, for every implemented change worth documenting.
+- Before starting any task, collect all available repository information: review and read **all** guides in `Extra/Guias/`, inspect relevant files, and confirm the current state before proposing or executing changes.
+- Always iterate through reproducible tests and do not stop until the task is fully functional. If unsure or blocked, ask the user.
+- Once the user-requested task is complete and verified stable/valid, ask the user whether to run `git add .` and commit with a clear summary of what was added. Never push; the user does that. Always wait for approval.
+- Do not run git commands (`add`, `commit`, `reset`, `revert`, etc.) unless the user explicitly asks.
+- When adding new functions in `utils`, implement them in the most appropriate existing `.py` file or create a new one if none fits.
+- Never identify yourself as responsible or mention agent names (for example, Codex); focus on actions and results.
+- The application runs from `app.py`, and imports live in `utils`. Respect this.
+- Try to keep files under two thousand lines of code.
+- Visible UI text and code comments must be in English. Guide documents should also be kept in English for this repository.
 
-## Memoria operativa (items)
-- `memory`: decisiones de diseño, invariantes, convenciones duras (naming, patrones que no se rompen), razones de arquitectura, mapas mentales breves y antipatrones detectados. Úsalo para atajos que el agente debe recordar antes de tocar código.
-- `doc`: manuales o flujos largos (arquitectura, APIs, protocolos, pasos de despliegue), ejemplos reproducibles, listas de comandos; edita con `patch_doc` (diffs) para mantener historia limpia.
-- `bug`: incidencias reproducibles o P0 sospechados; documenta entorno, pasos exactos y comportamiento esperado/observado; añade meta con:
-  - `severity` (`high|medium|low`), `reproduction` (pasos exactos), `expected`, `root_cause`
-  - opcionales: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (lista), `related_files` (lista)
-- `todo`: tareas accionables; meta con `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (lista), `dependencies` (lista), `priority` (`p0|p1|p2`). Divide si la tarea crece.
-  - opcional: `related_files` (lista de rutas/URLs)
+## External Expert Agent (Internet Access)
 
-### Campos meta sugeridos (validados)
+- The user has an external agent with internet access that you can request at any time. Use it when expert analysis can save time or avoid outdated decisions. Write a clear prompt, share it with the user, and wait for the response before applying changes.
+
+- When to request it
+  - Architecture and design decisions (patterns, boundaries, API contracts).
+  - Comparisons of solutions, libraries, or MCP servers and their trade-offs.
+  - Security (policies, whitelists/flags, resource limits, audits).
+  - Cross-platform concerns (WSL, macOS, Windows/ConPTY), TTY, signals, performance.
+  - Dependency choices and roadmaps (avoid obsolete architectures from the start).
+
+- How to use it
+  - Write a clear prompt with context, goals, and constraints.
+  - Give it to the user to paste into an internet-enabled LLM and wait for the response before changing code.
+  - Ask for actionable deliverables: executive summary, comparison, step-by-step plan, and recommendations.
+
+- Best practices
+  - Clearly define context, goals, and success criteria.
+  - Request risks, alternatives, and “do not do” guidance with justification.
+  - Document decisions and next steps briefly and actionably.
+  - Use it for impactful doubts; avoid mechanical consultations.
+
+## Operational Memory (Items)
+
+- `memory`: design decisions, invariants, hard conventions (naming, patterns that must not be broken), architectural rationale, brief mental maps, and detected antipatterns. Use it for shortcuts the agent should remember before touching code.
+- `doc`: manuals or long flows (architecture, APIs, protocols, deployment steps), reproducible examples, command lists; edit with `patch_doc` (diffs) to keep history clean.
+- `bug`: reproducible incidents or suspected P0s; document environment, exact steps, and expected/observed behavior; add meta with:
+  - `severity` (`high|medium|low`), `reproduction` (exact steps), `expected`, `root_cause`
+  - optional: `logs_excerpt`, `fix_summary`, `fixed_in_commit`, `resolution_criteria` (list), `related_files` (list)
+- `todo`: actionable tasks; meta with `kind` (`bug_fix|refactor|feature|chore`), `acceptance_criteria` (list), `dependencies` (list), `priority` (`p0|p1|p2`). Split it if the task grows.
+  - optional: `related_files` (list of paths/URLs)
+
+### Suggested Meta Fields (Validated)
+
 - `memory` (meta): `topic`, `decision`, `context`, `rationale`, `related_links` ([])
 - `doc` (meta): `authors` ([]), `source_url`, `related_docs` ([]), `version_notes`
-- `bug` (meta): ver lista anterior
-- `todo` (meta): ver lista anterior
+- `bug` (meta): see the list above
+- `todo` (meta): see the list above
 
-### Cuándo crear o actualizar
-- Crea `memory` cuando tomes una decisión estructural, detectes un pitfall recurrente o acuerdes un invariante (p.ej., “no usar llm X sin cache”, “todas las rutas pasan por middleware Y”). Refresca o fusiona si hay duplicados; mantén corto y accionable.
-- Pasa a `doc` si el cuerpo excede lo recordable de un vistazo o requiere pasos secuenciales; actualiza tras cada cambio de flujo o dependencia (DB, índices, variables de entorno, comandos de rebuild).
-- Abre `bug` al reproducir o ver síntoma grave; añade logs/inputs y versión del entorno; mueve a `to_verify` solo tras una comprobación reproducible. Cierra con fix y verificación explícita.
-- Usa `todo` para la ejecución: desglosa en subtareas si bloquea; actualiza estados (`pending` → `in_progress` → `to_verify` → `resolved`) según validaciones reales.
+### When To Create Or Update
 
-### Guardado y edición eficaz
-- Prioriza `memory` para decisiones rápidas que guíen al agente en la próxima acción; si se vuelve un proceso, promuévelo a `doc` y enlaza.
-- Cada `doc` debe enlazar a `memory` o `bug` relevantes para contexto cruzado; incluye comandos concretos y checks esperados.
-- En `bug`, documenta “cómo lo rompí” (input exacto, dataset, flags) y “por qué importa” (impacto usuario/índice); al fijar, añade “cómo lo comprobé”.
-- En `todo`, guarda criterios de aceptación verificables y dependencias; evita tareas ambiguas.
+- Create `memory` when you make a structural decision, detect a recurring pitfall, or agree on an invariant (for example, “do not use LLM X without cache”, “all routes go through middleware Y”). Refresh or merge duplicates; keep it short and actionable.
+- Promote to `doc` if the body exceeds what can be remembered at a glance or requires sequential steps; update after every flow or dependency change (DB, indexes, environment variables, rebuild commands).
+- Open a `bug` when you reproduce or see a serious symptom; add logs/inputs and environment version; move to `to_verify` only after a reproducible check. Close with a fix and explicit verification.
+- Use `todo` for execution: break it into subtasks if it blocks; update statuses (`pending` -> `in_progress` -> `to_verify` -> `resolved`) according to real validations.
 
-## Tools MCP rápidas
-Nota: algunas tools pueden estar desactivadas y no podrás usarlas.
-- rag: `hybrid_search` (busca denso+léxico con MMR/rerank), `chunks_by_url` (devuelve todos los chunks de una URL), `dense_search`/`lexical_search`.
-- python_cli: `python_cli_start` (lanza sesión Python: script o módulo), `python_cli_send` (envía input), `python_cli_stop` (SIGINT/SIGTERM/SIGKILL), `python_cli_restart` (relanza con la configuración original). No ejecuta shell general.
-- items (proyectos): siempre pasa `project` o `project_id`.
-  - `store_item` crea `memory/doc/bug/todo` (versión 1).
-  - `get_item` recupera uno; `list_items` filtra por tipo/estado/tags; `search_items` busca en título/cuerpo/meta.
-  - `update_item` cambia metadatos (`title`, `tags`, `status`, `meta`) y sube versión. Estados permitidos: `pending`, `in_progress`, `to_verify`, `resolved`.
-  - `patch_doc` aplica diff unificado al `body_md` de un `doc` y sube versión (opcional `expected_version`).
-  - `delete_item` elimina un item del proyecto.
+### Efficient Storage And Editing
+
+- Prioritize `memory` for quick decisions that guide the next agent action; if it becomes a process, promote it to `doc` and link it.
+- Each `doc` should link relevant `memory` or `bug` items for cross-context; include concrete commands and expected checks.
+- In `bug`, document “how it broke” (exact input, dataset, flags) and “why it matters” (user/index impact); when fixing, add “how it was verified”.
+- In `todo`, store verifiable acceptance criteria and dependencies; avoid ambiguous tasks.
+
+## Quick MCP Tools
+
+Note: some tools may be disabled and unavailable.
+- rag: `hybrid_search` (dense+lexical search with MMR/rerank), `chunks_by_url` (returns every chunk for a URL), `dense_search`/`lexical_search`.
+- python_cli: `python_cli_start` (starts a Python session: script or module), `python_cli_send` (sends input), `python_cli_stop` (SIGINT/SIGTERM/SIGKILL), `python_cli_restart` (relaunches with the original configuration). It does not run a general shell.
+- items (projects): always pass `project` or `project_id`.
+  - `store_item` creates `memory/doc/bug/todo` (version 1).
+  - `get_item` retrieves one; `list_items` filters by type/status/tags; `search_items` searches title/body/meta.
+  - `update_item` changes metadata (`title`, `tags`, `status`, `meta`) and bumps version. Allowed statuses: `pending`, `in_progress`, `to_verify`, `resolved`.
+  - `patch_doc` applies a unified diff to a `doc` `body_md` and bumps version (optional `expected_version`).
+  - `delete_item` deletes an item from the project.

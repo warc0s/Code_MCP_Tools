@@ -1,5 +1,5 @@
 """
-Wrapper del reranker con soporte local o mediante DeepInfra.
+Reranker wrapper with local and DeepInfra support.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class PassageReranker:
     def __init__(self, config: RerankerConfig, mode: str = "local"):
         normalized_mode = (mode or "local").strip().lower()
         if normalized_mode not in {"local", "cloud"}:
-            raise ValueError("El modo del reranker debe ser 'local' o 'cloud'.")
+            raise ValueError("Reranker mode must be 'local' or 'cloud'.")
         self.mode = normalized_mode
 
         self.config = config
@@ -54,9 +54,9 @@ class PassageReranker:
         try:
             import torch
             from transformers import AutoModelForCausalLM, AutoTokenizer
-        except ImportError as exc:  # pragma: no cover - depende de instalación opcional
+        except ImportError as exc:  # pragma: no cover - depends on optional installation
             raise RuntimeError(
-                "transformers/torch no están instalados. Instala los paquetes requeridos para usar el reranker."
+                "transformers/torch are not installed. Install the required packages to use the reranker."
             ) from exc
 
         tokenizer_kwargs = {"padding_side": "left"}
@@ -115,7 +115,7 @@ class PassageReranker:
         load_env_file()
         token = os.getenv("DEEPINFRA_API_KEY")
         if not token:
-            raise RuntimeError("Falta la variable DEEPINFRA_API_KEY para usar el reranker en modo cloud.")
+            raise RuntimeError("Missing DEEPINFRA_API_KEY for cloud reranker mode.")
         self._cloud_token = token
         return token
 
@@ -134,7 +134,7 @@ class PassageReranker:
             import requests
         except ImportError as exc:
             raise RuntimeError(
-                "El paquete 'requests' es obligatorio para usar el modo cloud del reranker."
+                "The 'requests' package is required for cloud reranker mode."
             ) from exc
 
         token = self._ensure_cloud_token()
@@ -147,18 +147,18 @@ class PassageReranker:
             response = requests.post(url, headers=headers, json=payload, timeout=60)
         except requests.RequestException as exc:
             detail = _redact_secrets(exc, [token])
-            raise RuntimeError(f"Falló la petición al reranker de DeepInfra: {detail}") from exc
+            raise RuntimeError(f"DeepInfra reranker request failed: {detail}") from exc
 
         if response.status_code >= 400:
             detail = _redact_secrets(response.text, [token])
             raise RuntimeError(
-                f"DeepInfra devolvió un error {response.status_code} para el reranker: {detail}"
+                f"DeepInfra returned reranker error {response.status_code}: {detail}"
             )
 
         data = response.json()
         scores = data.get("scores")
         if not isinstance(scores, list) or len(scores) != size:
-            raise RuntimeError("Respuesta inesperada del reranker en modo cloud.")
+            raise RuntimeError("Unexpected response from cloud reranker.")
 
         for item, score in zip(candidates[:size], scores):
             item["rerank_score"] = float(score)

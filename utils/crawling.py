@@ -359,7 +359,7 @@ async def crawl_urls_to_markdown(url_entries: List[Dict], config: CrawlingConfig
 async def crawl_sitemap_async(sitemap_url: str, config: CrawlingConfig) -> List[CrawledDocument]:
     url_entries = await discover_urls_from_sitemap(sitemap_url, config)
     if not url_entries:
-        raise RuntimeError("No se encontraron URLs válidas en el sitemap.")
+        raise RuntimeError("No valid URLs were found in the sitemap.")
     return await crawl_urls_to_markdown(url_entries, config)
 
 
@@ -369,7 +369,7 @@ def crawl_sitemap(sitemap_url: str, config: CrawlingConfig) -> List[CrawledDocum
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        raise RuntimeError("crawl_sitemap debe ejecutarse desde un contexto síncrono.")
+        raise RuntimeError("crawl_sitemap must run from a synchronous context.")
     return asyncio.run(crawl_sitemap_async(sitemap_url, config))
 
 
@@ -387,7 +387,7 @@ async def crawl_url_list_async(urls: Sequence[str], config: CrawlingConfig) -> L
             continue
         cleaned_entries.append({"url": candidate})
     if not cleaned_entries:
-        raise RuntimeError("La lista de URLs no contiene entradas válidas.")
+        raise RuntimeError("The URL list does not contain valid entries.")
     return await crawl_urls_to_markdown(cleaned_entries, config)
 
 
@@ -397,7 +397,7 @@ def crawl_url_list(urls: Sequence[str], config: CrawlingConfig) -> List[CrawledD
     except RuntimeError:
         loop = None
     if loop and loop.is_running():
-        raise RuntimeError("crawl_url_list debe ejecutarse desde un contexto síncrono.")
+        raise RuntimeError("crawl_url_list must run from a synchronous context.")
     return asyncio.run(crawl_url_list_async(list(urls), config))
 
 

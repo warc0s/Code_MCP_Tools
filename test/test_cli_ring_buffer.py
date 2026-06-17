@@ -24,7 +24,7 @@ def _require_pty():
 
 
 def _streaming_cmd(lines: int = 200, sleep_ms: int = 2) -> str:
-    # Comando Python que emite varias líneas con pequeños delays y luego duerme
+    # Python command that emits several lines with small delays and then sleeps.
     delay = max(0, sleep_ms) / 1000.0
     return (
         "python -u -c \"import sys,time; "
@@ -40,16 +40,16 @@ def test_cli_ring_buffer_and_deltas():
     sid = res["session_id"]
     try:
         first = res.get("output", "")
-        # Debe llegar algo (al menos unas pocas líneas)
+        # Some output should arrive (at least a few lines).
         assert isinstance(first, str)
-        # Recoger más delta tras un pequeño tiempo
+        # Collect more delta after a short delay.
         res2 = send_input(session_id=sid, text="", timeout=0.2, max_bytes=100_000)
         out2 = res2.get("output", "")
         assert isinstance(out2, str)
-        # En total debemos tener múltiples apariciones de "line "
+        # In total there should be multiple "line " appearances.
         total_count = (first + out2).count("line ")
         assert total_count >= 10
-        # Un nuevo pull inmediato suele devolver poco o nada si no hubo nuevo output
+        # A new immediate pull usually returns little or nothing if there was no new output.
         res3 = send_input(session_id=sid, text="", timeout=0.05, max_bytes=100_000)
         out3 = res3.get("output", "")
         assert isinstance(out3, str)
@@ -63,11 +63,11 @@ def test_cli_send_respects_max_bytes_limit():
     res = start_session(command=cmd, timeout=0.05, max_bytes=128, log_enabled=False)
     sid = res["session_id"]
     try:
-        # Forzar un límite bajo en la lectura
+        # Force a low read limit.
         res2 = send_input(session_id=sid, text="", timeout=0.1, max_bytes=64)
         out = res2.get("output", "")
-        # Debe ser string y como máximo 64 bytes aprox (puede pasarse por UTF-8),
-        # toleramos +-16 bytes por codificación de salto de línea y variaciones
+        # It must be a string and around 64 bytes at most (UTF-8 can overshoot);
+        # tolerate +-16 bytes for newline encoding and variations.
         assert isinstance(out, str)
         assert len(out.encode("utf-8", errors="ignore")) <= 96
     finally:

@@ -22,7 +22,7 @@ async function ensureModule(name) {
   return loaded[name];
 }
 
-// Fallbacks so header buttons work even antes de cargar el módulo completo
+// Fallbacks so header buttons work even before the full module loads.
 window.gotoProjectSettings = () => ensureModule('config').then((mod) => mod?.gotoProjectSettings && mod.gotoProjectSettings());
 window.toggleTheme = toggleTheme;
 

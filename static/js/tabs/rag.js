@@ -185,7 +185,7 @@ export async function refreshDocs() {
 
 export async function refreshFiles() {
   const data = await getUrlFiles();
-  const fills = ['file-select', 'file-select-ingesta'];
+  const fills = ['file-select', 'file-select-ingest'];
   fills.forEach((id) => {
     const select = document.getElementById(id);
     if (!select) return;
@@ -301,7 +301,7 @@ export async function rebuildSitemap(elOrEvent) {
 }
 
 export async function rebuildFile(elOrEvent) {
-  const select = document.getElementById('file-select-ingesta') || document.getElementById('file-select');
+  const select = document.getElementById('file-select-ingest') || document.getElementById('file-select');
   const file = select?.value || '';
   if (!file) { showToast('Please select a file', 'error'); log('Select a file'); return; }
   const btn = _resolveButton(elOrEvent);

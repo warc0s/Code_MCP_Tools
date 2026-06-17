@@ -1,5 +1,5 @@
 """
-Wrapper del proveedor de embeddings con soporte para ejecución local o en OpenAI.
+Embedding provider wrapper with local and OpenAI execution support.
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ class EmbeddingProvider:
     def __init__(self, config: EmbeddingConfig, mode: str = "local"):
         normalized_mode = (mode or "local").strip().lower()
         if normalized_mode not in {"local", "cloud"}:
-            raise ValueError("El modo de embeddings debe ser 'local' o 'cloud'.")
+            raise ValueError("Embedding mode must be 'local' or 'cloud'.")
         self.mode = normalized_mode
 
         self.config = config
@@ -57,7 +57,7 @@ class EmbeddingProvider:
         self._model = None
         self._client = None
         self._embedding_dim: Optional[int] = config.embedding_dim
-        self._device: Optional[str] = None  # 'cuda' si disponible; 'cpu' en otro caso
+        self._device: Optional[str] = None  # 'cuda' if available; otherwise 'cpu'
         self._local_truncate_dim: Optional[int] = None
 
     def _load_sentence_transformer(self):
@@ -104,8 +104,8 @@ class EmbeddingProvider:
                 self._ensure_model_loaded()
             else:
                 raise RuntimeError(
-                    "No se pudo determinar la dimensión de embeddings para el modo cloud aún. "
-                    "Genera embeddings primero o configura 'embedding_dim' explícitamente."
+                    "Could not determine embedding dimension for cloud mode yet. "
+                    "Generate embeddings first or configure 'embedding_dim' explicitly."
                 )
         assert self._embedding_dim is not None
         return self._embedding_dim
@@ -120,7 +120,7 @@ class EmbeddingProvider:
 
         try:
             SentenceTransformer = self._load_sentence_transformer()
-        except ImportError as exc:  # pragma: no cover - se valida en runtime
+        except ImportError as exc:  # pragma: no cover - validated at runtime
             message_chain = []
             current = exc
             while current:
@@ -129,44 +129,44 @@ class EmbeddingProvider:
             joined = " ".join(message_chain).lower()
 
             hint = (
-                "sentence-transformers no está instalado. Añádelo a requirements.txt e instálalo."
+                "sentence-transformers is not installed. Add it to requirements.txt and install it."
             )
             if "no module named 'torch'" in joined or "requires the following packages" in joined:
                 hint = (
-                    "sentence-transformers requiere torch para funcionar. "
-                    "Instala una build CPU de torch (por ejemplo, `pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`)."
+                    "sentence-transformers requires torch to work. "
+                    "Install a CPU torch build (for example, `pip install --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`)."
                 )
             elif "libnccl.so" in joined or "nccl" in joined:
                 hint = (
-                    "La build de torch detectada intenta usar NCCL/CUDA y falla. "
-                    "Instala la versión CPU: `pip install --upgrade --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`."
+                    "The detected torch build tries to use NCCL/CUDA and fails. "
+                    "Install the CPU version: `pip install --upgrade --extra-index-url https://download.pytorch.org/whl/cpu torch==2.4.1+cpu`."
                 )
             elif "torchvision::nms" in joined or "torchvision" in joined:
                 hint = (
-                    "Conflicto con torchvision detectado (mismatch con torch). "
-                    "Instala torchvision CPU a juego con tu torch: `pip install --extra-index-url https://download.pytorch.org/whl/cpu torchvision==0.19.1+cpu`."
+                    "torchvision conflict detected (mismatch with torch). "
+                    "Install CPU torchvision matching your torch: `pip install --extra-index-url https://download.pytorch.org/whl/cpu torchvision==0.19.1+cpu`."
                 )
             elif "could not import module 'pretrainedmodel'" in joined:
                 hint = (
-                    "Transformers parece roto o desalineado. Reinstala `transformers` y `sentence-transformers`: "
-                    "`pip install -U transformers sentence-transformers` y asegúrate de usar Torch/torchvision CPU compatibles."
+                    "Transformers seems broken or misaligned. Reinstall `transformers` and `sentence-transformers`: "
+                    "`pip install -U transformers sentence-transformers` and make sure Torch/torchvision CPU versions are compatible."
                 )
             elif "no module named 'six'" in joined:
                 hint = (
-                    "sentence-transformers requiere la dependencia `six`. "
-                    "Instálala con `pip install six`."
+                    "sentence-transformers requires the `six` dependency. "
+                    "Install it with `pip install six`."
                 )
             elif "automodelforsequenceclassification" in joined:
                 hint = (
-                    "La instalación de transformers está incompleta. Reinstala `transformers` y `torch`."
+                    "The transformers installation is incomplete. Reinstall `transformers` and `torch`."
                 )
 
-            raise RuntimeError(f"{hint} Detalle: {message_chain[0]}") from exc
+            raise RuntimeError(f"{hint} Detail: {message_chain[0]}") from exc
 
-        # Selección de dispositivo: usa CUDA si está disponible, si no CPU.
+        # Device selection: use CUDA if available, otherwise CPU.
         device = "cpu"
         try:
-            # Preferir un stub inyectado en tests si existe
+            # Prefer a test-injected stub when present.
             import sys as _sys  # type: ignore
             torch_mod = getattr(_sys.modules.get(__name__), "torch", None)
             if torch_mod is None:
@@ -186,7 +186,7 @@ class EmbeddingProvider:
             )
         except Exception as exc:
             raise RuntimeError(
-                f"No se pudo cargar el modelo de embeddings '{self.model_name}': {exc}"
+                f"Could not load embedding model '{self.model_name}': {exc}"
             ) from exc
 
         model_dim = self._model.get_sentence_embedding_dimension()
@@ -196,7 +196,7 @@ class EmbeddingProvider:
 
     @property
     def device(self) -> Optional[str]:
-        """Devuelve el dispositivo elegido ('cuda' o 'cpu') tras cargar el modelo."""
+        """Return the selected device ('cuda' or 'cpu') after loading the model."""
         return self._device
 
     def _ensure_cloud_client(self):
@@ -206,13 +206,13 @@ class EmbeddingProvider:
         load_env_file()
         api_key = os.getenv("openai_api_key") or os.getenv("OPENAI_API_KEY")
         if not api_key:
-            raise RuntimeError("Falta la variable openai_api_key (o OPENAI_API_KEY) para operar en modo cloud.")
+            raise RuntimeError("Missing openai_api_key (or OPENAI_API_KEY) for cloud mode.")
 
         try:
             from openai import OpenAI
         except ImportError as exc:
             raise RuntimeError(
-                "El paquete 'openai' es obligatorio para usar el modo cloud. Añádelo a requirements.txt."
+                "The 'openai' package is required for cloud mode. Add it to requirements.txt."
             ) from exc
 
         self._client = OpenAI(
@@ -240,7 +240,7 @@ class EmbeddingProvider:
                 encoding_format="float",
             )
         except Exception as exc:
-            raise RuntimeError(f"No fue posible generar embeddings en OpenAI: {exc}") from exc
+            raise RuntimeError(f"Could not generate embeddings with OpenAI: {exc}") from exc
 
         vectors: List[List[float]] = []
         for item in response.data:

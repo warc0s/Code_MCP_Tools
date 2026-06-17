@@ -1,109 +1,121 @@
-# UI de Memory renovada
+# Refreshed Memory UI
 
-Esta guía resume los cambios de usabilidad en la sección Memory del panel web.
+This guide summarizes usability changes in the Memory section of the web panel.
 
-## Nota importante sobre ámbito
-- El RAG es global (no por proyecto) y su rebuild reemplaza el índice global.
-- La memoria (proyectos/items) es por proyecto; la selección de proyecto solo afecta Memory.
+## Important Scope Note
 
-## Selección de proyecto
-- La selección de proyecto se hace en Configuration > Settings > Project selection.
-- Campo: `Project slug` y listado de proyectos existentes con botón Use.
-- Botón principal: `Save and set project` crea el proyecto si no existe y lo deja como activo, además de persistir la selección en `config.yaml` (`ui.selected_project`). No requiere restart.
-- El proyecto activo aparece en el header como un pill: Project: <slug>. Botón `Change` salta a Settings.
+- RAG is global (not per project), and rebuild replaces the global index.
+- Memory (`projects/items`) is project-scoped; project selection only affects Memory.
 
-## Pestaña Memory
-- Subpestañas: Memory, Docs, Bugs, Todo.
-- El board tipo kanban aparece en `Todo` y ahora también en `Bugs`.
-  - En `Bugs` se muestran solo dos columnas: `Pending` y `Resolved`; cualquier estado no resuelto (`pending`, `in_progress`, `to_verify` o vacío) se agrupa visualmente en `Pending` para no ocultar bugs creados desde API/MCP.
-- Para Memory/Docs/Bugs se muestra un listado de tarjetas simple (grid), con:
-  - Título, tipo, versión, tags
-  - Extracto del body (cuando aplica)
-  - Acciones: ✎ Edit (inline), Delete
+## Project Selection
 
-## Edición inline (✎)
-- Al pulsar ✎ en una card se despliega un editor inline con:
+- Project selection lives in Configuration > Settings > Project selection.
+- Field: `Project slug` and a list of existing projects with a Use button.
+- Main button: `Save and set project` creates the project if it does not exist, makes it active, and persists the selection in `config.yaml` (`ui.selected_project`). No restart is required.
+- The active project appears in the header as a pill: Project: <slug>. The `Change` button jumps to Settings.
+
+## Memory Tab
+
+- Subtabs: Memory, Docs, Bugs, Todo.
+- The Kanban board appears in `Todo` and now also in `Bugs`.
+  - In `Bugs`, only two columns are shown: `Pending` and `Resolved`; every unresolved state (`pending`, `in_progress`, `to_verify`, or empty) is visually grouped under `Pending` so bugs created through API/MCP are not hidden.
+- For Memory/Docs/Bugs, a simple card grid is shown with:
+  - Title, type, version, tags
+  - Body excerpt when available
+  - Actions: Edit (inline), Delete
+
+## Inline Editing
+
+- Clicking Edit on a card opens an inline editor with:
   - Title, Status, Tags
-  - Typed fields por tipo (obligatorios):
+  - Typed fields per type (required where applicable):
     - bug: severity, reproduction, expected, root_cause
     - todo: kind, acceptance_criteria, priority
     - memory: topic, decision, context, rationale
-    - doc: authors, related_docs (opcionales)
-  - Meta (JSON, opcional; extras como done_summary, related_files, logs...)
-  - Body (markdown) para todos los tipos (`memory`, `doc`, `bug`, `todo`)
-  - En `todo` se muestra la ayuda de prioridad: `p0` (máxima/urgente), `p1` (alta), `p2` (normal)
-- Guardado:
-  - Primero actualiza metadatos vía `PATCH /ui/api/items/{id}` con `fields`
-  - Después, si hay body, lo guarda con `POST /ui/api/items/{id}/body` (aplica a cualquier tipo)
-  - Se usa `expected_version` para el body, evitando pisar cambios concurrentes.
+    - doc: authors, related_docs (optional)
+  - Meta (JSON, optional; extras such as done_summary, related_files, logs...)
+  - Body (markdown) for every type (`memory`, `doc`, `bug`, `todo`)
+  - In `todo`, the priority hint is shown: `p0` (highest/urgent), `p1` (high), `p2` (normal)
+- Save flow:
+  - First updates metadata through `PATCH /ui/api/items/{id}` with `fields`
+  - Then, if body is present, saves it with `POST /ui/api/items/{id}/body` (applies to any type)
+  - Uses `expected_version` for body updates to avoid overwriting concurrent changes.
 
-## Eliminaciones y estado
-- Delete en cada card elimina el item del proyecto activo.
-- En Todo y Bugs, el drag-and-drop entre columnas cambia el `status`.
-  - Al mover a `Resolved`, si faltan `meta.done_summary` (≥120 chars) o `meta.related_files` (al menos uno), la UI solicita esos datos en un modal y los guarda junto al cambio de estado.
-  - También desde el editor inline: si cambias `Status` a `Resolved` y faltan esos campos, se abre el mismo modal antes de guardar.
-  - Los valores preexistentes que se precargan en ese modal se escapan antes de insertarlos en HTML, incluyendo comillas y ampersands, para evitar roturas de atributos o inyección accidental.
+## Deletion And Status
 
-## Qué desaparece
-- Bloque de “Project selection” dentro de Memory (ahora en Settings).
-- Botón “Create empty project” (la acción queda integrada en “Save and set project”).
-- Editor global “Update metadata / Patch doc”.
-- UI de “pegar un diff” para `doc`: ahora es edición textual directa y reemplazo de body.
+- Delete on each card removes the item from the active project.
+- In Todo and Bugs, drag-and-drop between columns changes `status`.
+  - When moving to `Resolved`, if `meta.done_summary` (>=120 chars) or `meta.related_files` (at least one) are missing, the UI asks for them in a modal and saves them together with the status change.
+  - The same applies from the inline editor: if you change `Status` to `Resolved` and those fields are missing, the same modal opens before saving.
+  - Existing values preloaded into that modal are escaped before being inserted into HTML, including quotes and ampersands, to avoid attribute breakage or accidental injection.
 
-## Notas técnicas
-- La selección de proyecto se persiste en `config.yaml` sección `ui`:
+## Removed Pieces
+
+- “Project selection” block inside Memory (now in Settings).
+- “Create empty project” button (the action is integrated into “Save and set project”).
+- Global “Update metadata / Patch doc” editor.
+- “Paste a diff” UI for `doc`: direct text editing and body replacement are now used.
+
+## Technical Notes
+
+- Project selection is persisted in the `ui` section of `config.yaml`:
 
 ```yaml
 ui:
   selected_project: my-project
 ```
 
-- Nuevo endpoint para actualizar body: `POST /ui/api/items/{id}/body` con JSON:
+- New endpoint for body updates: `POST /ui/api/items/{id}/body` with JSON:
 
 ```json
 {
   "project": "my-project",
-  "body_md": "nuevo markdown",
+  "body_md": "new markdown",
   "expected_version": 3
 }
 ```
 
-- La edición de metadatos sigue usando `PATCH /ui/api/items/{id}` con `fields`.
+- Metadata editing still uses `PATCH /ui/api/items/{id}` with `fields`.
 
-## Plantillas y UX
-- El formulario “Create item” incluye campos tipados por tipo (obligatorios cuando aplica). El bloque “Meta (JSON)” queda como avanzado/opcional para extras; su plantilla se auto-aplica al cambiar de tipo.
+## Templates And UX
 
-## Modal “Show”
-- Cada tarjeta incluye un botón `Show` que abre un modal de solo lectura con el detalle completo del item:
-  - Datos básicos (tipo, versión, estado, tags)
-  - Campos `typed` por tipo (p. ej., bug: severity, expected, reproduction, root_cause)
-  - Extras en `meta` cuando existan (done_summary, related_files, logs_excerpt, criteria)
-  - Body completo si existe
+- The “Create item” form includes typed fields by type (required when applicable). The “Meta (JSON)” block is kept advanced/optional for extras; its template is auto-applied when changing type.
 
-### Campos sugeridos por tipo (Meta JSON)
+## “Show” Modal
+
+- Each card includes a `Show` button that opens a read-only modal with the full item detail:
+  - Basic data (type, version, status, tags)
+  - `typed` fields by type (for example bug: severity, expected, reproduction, root_cause)
+  - Extras in `meta` when present (done_summary, related_files, logs_excerpt, criteria)
+  - Full body when present
+
+### Suggested Fields By Type (Meta JSON)
+
 - bug:
   - severity (high|medium|low)
-  - reproduction (pasos exactos)
-  - logs_excerpt (opcional)
-  - expected (comportamiento esperado)
-  - root_cause (causa raíz)
-  - done_summary (resumen de implementación al resolver, ≥120 chars)
-  - resolution_criteria (lista de checks para darlo por resuelto)
-  - related_files (lista de rutas/URLs, opcional)
+  - reproduction (exact steps)
+  - logs_excerpt (optional)
+  - expected (expected behavior)
+  - root_cause (root cause)
+  - done_summary (implementation summary when resolving, >=120 chars)
+  - resolution_criteria (list of checks to consider it resolved)
+  - related_files (list of paths/URLs, optional)
 - todo:
   - kind (bug_fix|refactor|feature|chore)
-  - reproduction (opcional)
-  - acceptance_criteria (lista)
-  - dependencies (lista)
+  - reproduction (optional)
+  - acceptance_criteria (list)
+  - dependencies (list)
   - priority (p0|p1|p2)
-  - related_files (lista de rutas/URLs, opcional)
-  - done_summary (resumen de implementación al resolver, ≥120 chars)
+  - related_files (list of paths/URLs, optional)
+  - done_summary (implementation summary when resolving, >=120 chars)
 
-## Validación Pydantic y schema MCP
-- El backend valida `meta` con modelos Pydantic específicos por tipo. Si faltan campos obligatorios o hay valores inválidos, devuelve un error detallado (campos faltantes, valores inválidos) para corregir rápidamente.
-- Las tools MCP `store_item` y `update_item` exponen en su JSON Schema un `oneOf` con el esquema de `meta` para cada tipo (memory/doc/bug/todo).
+## Pydantic Validation And MCP Schema
 
-## Campos meta auxiliares
+- The backend validates `meta` with type-specific Pydantic models. If required fields are missing or values are invalid, it returns a detailed error (missing fields, invalid values) to make correction fast.
+- MCP tools `store_item` and `update_item` expose a `oneOf` JSON Schema for `meta` per type (memory/doc/bug/todo).
+
+## Auxiliary Meta Fields
+
 - doc:
   - authors ([])
   - source_url
@@ -116,4 +128,4 @@ ui:
   - rationale
   - related_links ([])
 
-Si algo no responde como esperas, dime el caso concreto y lo ajusto.
+If something behaves unexpectedly, report the concrete case and adjust the implementation.

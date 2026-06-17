@@ -1,8 +1,8 @@
-# Resumen visual de tools MCP
+# Visual Summary Of MCP Tools
 
 ```mermaid
 flowchart TD
-    root([Tools MCP])
+    root([MCP Tools])
     rag{RAG}
     python_cli{Python CLI}
     items{Items}
@@ -11,10 +11,10 @@ flowchart TD
     root --> python_cli
     root --> items
 
-    rag --> hybrid[hybrid_search<br/>Búsqueda híbrida con MMR/reranker]
-    rag --> chunks[chunks_by_url<br/>Todos los chunks de una URL]
-    rag -.-|Deshabilitado en config| dense[dense_search<br/>Vectorial pura]
-    rag -.-|Deshabilitado en config| lexical[lexical_search<br/>BM25/FTS]
+    rag --> hybrid[hybrid_search<br/>Hybrid search with MMR/reranker]
+    rag --> chunks[chunks_by_url<br/>All chunks for a URL]
+    rag -.-|Disabled in config| dense[dense_search<br/>Pure vector search]
+    rag -.-|Disabled in config| lexical[lexical_search<br/>BM25/FTS]
 
     python_cli --> start[python_cli_start<br/>Python script/module]
     python_cli --> send[python_cli_send<br/>Send input + read]
@@ -22,24 +22,26 @@ flowchart TD
     python_cli --> restart[python_cli_restart<br/>Restart with same config]
     python_cli --> call[python_call_function<br/>Function call in subprocess]
 
-    items --> store[store_item<br/>Crea memory/doc/bug/todo]
-    items --> update[update_item<br/>Actualiza metadatos]
-    items --> get[get_item<br/>Recupera un item por id]
-    items --> list[list_items<br/>Filtra por tipo/estado/tags]
-    items --> search[search_items<br/>Búsqueda por texto/meta]
-    items --> patch[patch_doc<br/>Diff sobre body_md de docs]
-    items --> del[delete_item<br/>Elimina un item]
+    items --> store[store_item<br/>Create memory/doc/bug/todo]
+    items --> update[update_item<br/>Update metadata]
+    items --> get[get_item<br/>Retrieve an item by id]
+    items --> list[list_items<br/>Filter by type/status/tags]
+    items --> search[search_items<br/>Search text/meta]
+    items --> patch[patch_doc<br/>Diff over doc body_md]
+    items --> del[delete_item<br/>Delete an item]
 ```
 
-## Notas rápidas
-- `hybrid_search`: mezcla denso+léxico, normaliza, aplica MMR y reranker si está activo.
-- `chunks_by_url`: devuelve todos los chunks y metadatos de una URL.
-- `dense_search` / `lexical_search`: están presentes pero deshabilitados en `config.yaml` (actívalos con `mcp.tools` o sets).
-- Ámbito: el índice RAG es global (no por proyecto); las tools de Items operan por proyecto.
-- `python_cli_start`/`python_cli_send`/`python_cli_stop`/`python_cli_restart`: sesiones interactivas de Python (script o módulo); aceptan `conda_env`, `workdir`, `timeout`, y devuelven `status_hint`/`next_step`. `max_bytes` opcional limita el delta de salida por lectura (por defecto 16000). No ejecuta shell general.
-- `python_call_function`: llamada no interactiva a funciones de `utils.*`/`scripts.*` en subproceso con payload JSON y respuesta estructurada `ok/result/stdout/stderr/error_*`.
-- `store_item`/`update_item`/`get_item`/`list_items`/`search_items`/`patch_doc`/`delete_item`: gestión de items por proyecto (`project` o `project_id`). `typed` recoge campos obligatorios por tipo; `meta` es opcional para extras. `patch_doc` edita docs por diff unificado.
+## Quick Notes
 
-## Novedades UI relacionadas
-- Dashboard → Status: agrupa las tools activas por grupo y muestra contadores de Memory para el proyecto activo.
-- Dashboard → Integrations: snippets listos para Codex CLI, Claude Code y GitHub Copilot (VS Code).
+- `hybrid_search`: combines dense+lexical search, normalizes scores, applies MMR, and reranks when enabled.
+- `chunks_by_url`: returns every chunk and metadata for a URL.
+- `dense_search` / `lexical_search`: present but disabled in `config.yaml`; enable them with `mcp.tools` or tool sets.
+- Scope: the RAG index is global (not per project); Items tools operate per project.
+- `python_cli_start`/`python_cli_send`/`python_cli_stop`/`python_cli_restart`: interactive Python sessions (script or module); accept `conda_env`, `workdir`, `timeout`, and return `status_hint`/`next_step`. Optional `max_bytes` limits the output delta per read (default 16000). They do not execute a general shell.
+- `python_call_function`: non-interactive function calls to `utils.*`/`scripts.*` in a subprocess with structured `ok/result/stdout/stderr/error_*` output.
+- `store_item`/`update_item`/`get_item`/`list_items`/`search_items`/`patch_doc`/`delete_item`: project-scoped item management (`project` or `project_id`). `typed` carries required per-type fields; `meta` is optional for extras. `patch_doc` edits docs by unified diff.
+
+## Related UI Changes
+
+- Dashboard -> Status: groups active tools by category and shows Memory counters for the active project.
+- Dashboard -> Integrations: ready-to-copy snippets for Codex CLI, Claude Code, and GitHub Copilot (VS Code).

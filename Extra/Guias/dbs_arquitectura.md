@@ -1,12 +1,14 @@
-# División de BBDD: RAG (DuckDB) / Memoria (SQLite)
+# DB Split: RAG (DuckDB) / Memory (SQLite)
 
-Esta guía documenta la separación de la base de datos en dos motores, manteniendo compatibilidad con la UI/MCP y sin romper flujos existentes.
+This guide documents the database split across two engines while keeping UI/MCP compatibility and preserving existing flows.
 
-## Objetivo
-- Aislar el almacén RAG (documentos/chunks/índices VSS/FTS) en DuckDB.
-- Mover `projects/items` (memoria interna, docs, bugs, todo) a SQLite para operaciones CRUD ligeras y estabilidad.
+## Goal
 
-## Configuración (`config.yaml`)
+- Isolate the RAG store (documents/chunks/VSS/FTS indexes) in DuckDB.
+- Move `projects/items` (internal memory, docs, bugs, todos) to SQLite for lightweight CRUD operations and stability.
+
+## Configuration (`config.yaml`)
+
 ```yaml
 main:
   mode: local
@@ -14,32 +16,37 @@ main:
 database:          # RAG (DuckDB)
   path: data/rag.duckdb
 
-memory_database:   # Memoria (SQLite)
+memory_database:   # Memory (SQLite)
   path: data/memory.sqlite3
 ```
 
-- Si `memory_database` no existe, se crea automáticamente al arrancar.
-- `database.path` mantiene su semántica anterior: es el RAG (DuckDB).
+- If `memory_database` does not exist, it is created automatically at startup.
+- `database.path` keeps its previous meaning: it is the RAG DuckDB path.
 
-## Esquemas
-- DuckDB (RAG): `docs`, `chunks`, `metadata` (con VSS/FTS si están disponibles).
-- SQLite (memoria): `projects`, `items`, `metadata`.
-  - `items` incluye las columnas base (`tags`, `status`, `meta`) y columnas tipadas por tipo añadidas idempotentemente (p. ej., `bug_severity`, `todo_kind`, `memory_topic`, etc.). Las listas tipadas se almacenan como JSON en columnas `TEXT`.
+## Schemas
 
-## Ámbito
-- RAG: global para toda la app; un rebuild sustituye el índice completo.
-- Memoria: por proyecto; la UI y tools operan sobre el `ui.selected_project`.
+- DuckDB (RAG): `docs`, `chunks`, `metadata` (with VSS/FTS when available).
+- SQLite (memory): `projects`, `items`, `metadata`.
+  - `items` includes base columns (`tags`, `status`, `meta`) and per-type typed columns added idempotently (for example `bug_severity`, `todo_kind`, `memory_topic`, etc.). Typed lists are stored as JSON in `TEXT` columns.
 
-## Arranque y wiring
-- `app.py` inicializa SQLite con `bootstrap_memory_db` y crea `ItemService` con `memory_database`.
-- El `Retriever` se abre contra DuckDB usando `database.path` como antes.
-- Los endpoints UI/MCP siguen igual; sólo cambia dónde vive la persistencia.
+## Scope
 
-## Notas técnicas
-- En SQLite se aplica `PRAGMA foreign_keys=ON` y `PRAGMA busy_timeout=5000` por conexión. Las rutas internas que solicitan `read_only=True` abren la BBDD con URI `mode=ro`, por lo que cualquier escritura accidental falla en el motor.
-- Columnas `tags`/`meta` se almacenan como `TEXT` (JSON serializado) y se normalizan via `json.dumps/loads` en `ItemService`. Los campos tipados se guardan en columnas específicas para queries simples y UX más clara.
-- En búsquedas sobre items, `CAST(... AS VARCHAR)` se sustituyó por `lower(i.meta)` para compatibilidad SQLite.
-- En el rebuild del RAG, DuckDB ya no intenta crear índices sobre `items`.
+- RAG: global for the whole app; a rebuild replaces the full index.
+- Memory: project-scoped; the UI and tools operate on `ui.selected_project`.
 
-## Migraciones
-- Fase de desarrollo: no se migra desde DuckDB a SQLite automáticamente (no mantenemos datos previos). Si hubiera items previos en DuckDB, recrea manualmente en el nuevo proyecto.
+## Startup And Wiring
+
+- `app.py` initializes SQLite with `bootstrap_memory_db` and creates `ItemService` with `memory_database`.
+- `Retriever` opens DuckDB through `database.path` as before.
+- UI/MCP endpoints remain the same; only the persistence location changes.
+
+## Technical Notes
+
+- SQLite applies `PRAGMA foreign_keys=ON` and `PRAGMA busy_timeout=5000` per connection. Internal paths that request `read_only=True` open the DB with URI `mode=ro`, so accidental writes fail in the engine.
+- `tags`/`meta` columns are stored as `TEXT` (serialized JSON) and normalized through `json.dumps/loads` in `ItemService`. Typed fields are stored in specific columns for simpler queries and clearer UX.
+- Item searches replaced `CAST(... AS VARCHAR)` with `lower(i.meta)` for SQLite compatibility.
+- RAG rebuild no longer tries to create indexes over `items`.
+
+## Migrations
+
+- Development phase: there is no automatic migration from DuckDB to SQLite because old data is not preserved. If previous items existed in DuckDB, recreate them manually in the new project.

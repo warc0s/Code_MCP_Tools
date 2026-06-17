@@ -1,8 +1,8 @@
 """
-Gestión de configuración de la aplicación.
+Application configuration management.
 
-La configuración se centraliza en `config.yaml`, se valida con dataclasses
-tipadas y se expone como un objeto inmutable.
+Configuration is centralized in `config.yaml`, validated with typed
+dataclasses, and exposed as an immutable object.
 """
 
 from __future__ import annotations
@@ -21,7 +21,7 @@ class MainConfig:
     def __post_init__(self) -> None:
         normalized = (self.mode or "local").strip().lower()
         if normalized not in {"local", "cloud"}:
-            raise ValueError("El modo principal debe ser 'local' o 'cloud'.")
+            raise ValueError("main mode must be 'local' or 'cloud'.")
         object.__setattr__(self, "mode", normalized)
 
 
@@ -84,7 +84,7 @@ class EmbeddingConfig:
     query_prompt_name: Optional[str] = "query"
     embedding_dim: Optional[int] = None
     cloud_model_name: Optional[str] = None
-    # Tamaño de lote para generación de embeddings (solo lectura en pipeline)
+    # Batch size for embedding generation (read-only in pipeline).
     batch_size: int = 64
 
 
@@ -153,7 +153,7 @@ class AppConfig:
             if isinstance(section, str) and "mode" in klass.__dataclass_fields__:
                 section = {"mode": section}
             if not isinstance(section, dict):
-                raise ValueError(f"La sección '{name}' debe ser un objeto.")
+                raise ValueError(f"Section '{name}' must be an object.")
             return cls._build_dataclass(klass, section) if section else klass()
 
         return cls(
@@ -173,10 +173,10 @@ class AppConfig:
     def load(cls, path: Path | str = "config.yaml") -> "AppConfig":
         location = Path(path)
         if not location.exists():
-            raise FileNotFoundError(f"No se encontró el archivo de configuración: {location}")
+            raise FileNotFoundError(f"Configuration file not found: {location}")
         data = yaml.safe_load(location.read_text(encoding="utf-8")) or {}
         if not isinstance(data, dict):
-            raise ValueError("El archivo de configuración debe contener un objeto YAML de primer nivel.")
+            raise ValueError("Configuration file must contain a top-level YAML object.")
         return cls.from_dict(data)
 
 

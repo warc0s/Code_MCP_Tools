@@ -2,69 +2,70 @@
 
 Local context layer for coding agents.
 
-VERSION ACTUAL: V3.0
+CURRENT VERSION: V3.0
 
-Local MCP server and control panel that gives coding agents persistent project context: memory, docs, bugs, todos, RAG search and controlled tools.
+Local MCP server and control panel that gives coding agents persistent project context: memory, docs, bugs, todos, RAG search, and controlled tools.
 
-## Qué incluye la V3.0
+## What V3.0 Includes
 
-- Panel web (`http://127.0.0.1:8000/`): pestañas de Dashboard, RAG, Tools MCP, Memory, Configuration y Logs.
-  - Dashboard → Status: muestra modo/modelos, documentos, MCP URL completo, tools activas por grupo y contadores de Memory por proyecto seleccionado.
-  - Dashboard → Integrations: instrucciones listas para pegar para Codex CLI, Claude Code y GitHub Copilot (VS Code), con URL actual y botones Copy.
-  - Dashboard → AGENTS.md: muestra las guidelines cargadas del backend. Incluye tarjetas informativas (no hay builder) para recordar qué secciones quitar/ajustar al copiar.
-- RAG: reconstrucción desde sitemap o ficheros `txt/` con recarga en caliente del retriever. Rebuild recrea `docs/chunks/metadata` en DuckDB, preservando `projects/items` que ahora viven en SQLite (`data/memory.sqlite3`). MCP expone `hybrid_search` y `chunks_by_url` (dense/lexical opcionales).
-  - Nota: el índice RAG es global (no por proyecto). La memoria es por proyecto.
-- RAG → Settings: configuración de modo (`local`/`cloud`), embeddings y reranker; persiste en `config.yaml`, requiere Restart MCP y Rebuild del índice.
-- Items: tools MCP `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`, `delete_item`. UI Memory trabaja sobre el mismo servicio. Tipos: `memory`, `doc`, `bug`, `todo` con estados `pending` → `in_progress` → `to_verify` → `resolved`.
-  - Body editable en todos los tipos desde el editor inline de la UI.
-  - Arquitectura de metadatos simplificada:
-    - Campos obligatorios por tipo se envían en `typed` (p. ej., bug: `severity,reproduction,expected,root_cause`; todo: `kind,acceptance_criteria,priority`; memory: `topic,decision,context,rationale`; doc: `authors,related_docs` opcionales).
-    - `meta` (JSON) queda para extras opcionales (logs, screenshots, resolution_criteria, related_files, done_summary, etc.).
-    - Enforcement al resolver: bug/todo deben incluir `meta.done_summary` (≥120 chars) y `meta.related_files` (>=1).
-  - La UI muestra inputs tipados y deja `Meta (JSON)` como bloque avanzado (opcional); se autoaplica la plantilla al cambiar de subtipo.
-- Projects: creación idempotente desde Settings; botón Delete con doble confirmación; no se permite borrar el proyecto activo. Las tools ya no crean proyectos automáticamente (devuelven “Project not found”).
-- Python CLI: tools `python_cli_start` / `python_cli_send` / `python_cli_stop` / `python_cli_restart` para sesiones interactivas de Python (script o módulo). No ejecuta shell general.
-- Robustez BD: borrado de proyectos en dos fases (items → proyecto) con FKs activas; sin parches de desactivar FKs.
-- Docker: instala PyTorch estándar; si hay GPU disponible, se usará, si no, CPU.
+- Web panel (`http://127.0.0.1:8000/`): Dashboard, RAG, MCP Tools, Memory, Configuration, and Logs tabs.
+  - Dashboard -> Status: shows mode/models, document count, full MCP URL, active tools grouped by category, and Memory counters for the selected project.
+  - Dashboard -> Integrations: copy-ready instructions for Codex CLI, Claude Code, and GitHub Copilot (VS Code), with the current URL and Copy buttons.
+  - Dashboard -> AGENTS.md: shows the backend-loaded guidelines. Includes info cards (no builder) to remind you which sections to remove or adjust before copying.
+- RAG: rebuild from sitemap or `txt/` files with hot retriever reload. Rebuild recreates `docs/chunks/metadata` in DuckDB while preserving `projects/items`, which now live in SQLite (`data/memory.sqlite3`). MCP exposes `hybrid_search` and `chunks_by_url` (dense/lexical are optional).
+  - Note: the RAG index is global (not project-scoped). Memory is project-scoped.
+- RAG -> Settings: mode (`local`/`cloud`), embeddings, and reranker configuration; persists to `config.yaml` and requires Restart MCP plus index Rebuild.
+- Items: MCP tools `store_item`, `update_item`, `get_item`, `list_items`, `search_items`, `patch_doc`, and `delete_item`. The Memory UI uses the same service. Types: `memory`, `doc`, `bug`, `todo` with statuses `pending` -> `in_progress` -> `to_verify` -> `resolved`.
+  - Body is editable for every type from the inline UI editor.
+  - Simplified metadata architecture:
+    - Required per-type fields are sent in `typed` (for example bug: `severity,reproduction,expected,root_cause`; todo: `kind,acceptance_criteria,priority`; memory: `topic,decision,context,rationale`; doc: optional `authors,related_docs`).
+    - `meta` (JSON) is reserved for optional extras (logs, screenshots, resolution_criteria, related_files, done_summary, etc.).
+    - Resolution enforcement: bug/todo items must include `meta.done_summary` (>=120 chars) and `meta.related_files` (>=1).
+  - The UI shows typed inputs and keeps `Meta (JSON)` as an advanced optional block; the template is auto-applied when switching subtype.
+- Projects: idempotent creation from Settings; Delete button with double confirmation; deleting the active project is blocked. Tools no longer auto-create projects (they return `Project not found`).
+- Python CLI: `python_cli_start` / `python_cli_send` / `python_cli_stop` / `python_cli_restart` for interactive Python sessions (script or module). It does not run a general shell.
+- DB robustness: project deletion runs in two phases (items -> project) with active FKs; no FK-disabling shortcuts.
+- Docker: installs standard PyTorch; GPU is used when available, otherwise CPU.
 
-## Requisitos
+## Requirements
 
 - Python 3.12
 - `pip install -r requirements.txt`
-- Conectividad inicial para extensiones DuckDB (`fts`, `vss`) y modelos locales (`voyageai/voyage-4-nano`, `Qwen/Qwen3-Reranker-0.6B`).
+- Initial connectivity for DuckDB extensions (`fts`, `vss`) and local models (`voyageai/voyage-4-nano`, `Qwen/Qwen3-Reranker-0.6B`).
 
-## Uso rápido
+## Quick Start
 
 ```bash
 python app.py
 ```
 
-- Arranca panel web + servidor MCP (`APP_PORT` 8000, `MCP_HTTP_PATH` `/mcp` por defecto).
-- Desde la UI:
-  - Dashboard: Status (modo/modelos, docs, MCP URL, tools por grupo, contadores Memory), Integrations (Codex/Claude/Copilot), AGENTS.md.
-  - RAG: Ingest (sitemap o ficheros `txt/`) y Settings (modo y modelos; requiere restart + rebuild).
-  - Memory: selecciona proyecto, crea items y gestiona estados; edición de metadatos y cuerpo (reemplazo directo en UI; o `patch_doc` por diff desde MCP).
-  - Tools MCP: activa/desactiva tools expuestas; requiere Restart MCP.
-  - Docs: lista hasta 50 documentos recientes del índice.
-Consulta `Extra/Guias/web_ui.md` para detalles y variables de entorno.
+- Starts the web panel and MCP server (`APP_PORT` 8000, `MCP_HTTP_PATH` `/mcp` by default).
+- From the UI:
+  - Dashboard: Status (mode/models, docs, MCP URL, tools by group, Memory counters), Integrations (Codex/Claude/Copilot), AGENTS.md.
+  - RAG: Ingest (sitemap or `txt/` files) and Settings (mode and models; requires restart + rebuild).
+  - Memory: select a project, create items, manage statuses, and edit metadata/body (direct replacement in UI; or `patch_doc` by diff from MCP).
+  - MCP Tools: enable/disable exposed tools; requires Restart MCP.
+  - Docs: lists up to 50 recent documents from the index.
 
-## Persistencia y BBDD
+See `Extra/Guias/web_ui.md` for details and environment variables.
 
-- RAG global en DuckDB: `data/rag.duckdb`
-- Memoria por proyecto en SQLite: `data/memory.sqlite3`
-- Configuración en `config.yaml`:
+## Persistence And Databases
+
+- Global RAG in DuckDB: `data/rag.duckdb`
+- Project-scoped Memory in SQLite: `data/memory.sqlite3`
+- Configuration in `config.yaml`:
 
 ```yaml
 database:          # RAG (DuckDB)
   path: data/rag.duckdb
 
-memory_database:   # Memoria (SQLite)
+memory_database:   # Memory (SQLite)
   path: data/memory.sqlite3
 ```
 
-Notas de alcance:
-- El índice RAG es global (no por proyecto). Un rebuild sustituye el índice global.
-- La memoria (projects/items) es por proyecto. Selección en UI → Configuration → Settings.
+Scope notes:
+- The RAG index is global (not project-scoped). A rebuild replaces the global index.
+- Memory (`projects/items`) is project-scoped. Selection lives in UI -> Configuration -> Settings.
 
 ## Docker (Python 3.12.11)
 
@@ -81,7 +82,7 @@ docker run -p 8000:8000 \
   contextarium-tools
 ```
 
-- En local el host por defecto es `127.0.0.1` (si no defines `APP_HOST`). En Docker se recomienda `APP_HOST=0.0.0.0` (ya incluido en `docker-compose.yml`). Botón “Restart MCP” reinicia el contenedor si `CONTAINER_NAME` está definido. Logs: `docker logs -f contextarium-tools`.
+- Locally, the default host is `127.0.0.1` unless `APP_HOST` is set. In Docker, `APP_HOST=0.0.0.0` is recommended and already included in `docker-compose.yml`. The “Restart MCP” button restarts the container when `CONTAINER_NAME` is set. Logs: `docker logs -f contextarium-tools`.
 
 ### Docker Compose
 
@@ -90,19 +91,19 @@ docker compose build
 docker compose up
 ```
 
-## Pruebas
+## Tests
 
 ```bash
 python -m pytest
 ```
 
-Valida RAG híbrido, BM25 (cuando FTS está disponible), contrato MCP y modelos de meta por tipo.
+Validates hybrid RAG, BM25 when FTS is available, the MCP contract, and per-type meta models.
 
-JSON Schema de items en tools MCP
-- `store_item` y `update_item` exponen `typed` (oneOf por tipo; requerido en `store_item` para memory/bug/todo) y `meta` (oneOf opcional). Los clientes pueden construir payloads válidos sin JSONs largos obligatorios.
+Item JSON Schema in MCP tools:
+- `store_item` and `update_item` expose `typed` (oneOf per type; required in `store_item` for memory/bug/todo) and `meta` (optional oneOf). Clients can build valid payloads without long required JSON blobs.
 
-## TODO / próximo
+## TODO / Next
 
-- Mejorar soporte FTS/BM25 real en entornos donde la extensión falle (evitar fallback LIKE).
-- Forzar refresco de tools en clientes MCP al inicio de sesión.
-- (Opcional) Multi-corpus en la misma BD con filtrado por corpus en tools RAG.
+- Improve real FTS/BM25 support in environments where the extension fails (avoid LIKE fallback).
+- Force MCP clients to refresh tools at session start.
+- Optional: multi-corpus support in the same DB with corpus filtering in RAG tools.

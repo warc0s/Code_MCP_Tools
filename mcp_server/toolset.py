@@ -1,5 +1,5 @@
 """
-Toolset MCP para exponer búsquedas del RAG y tools de CLI.
+MCP toolset exposing RAG search and CLI tools.
 """
 
 from __future__ import annotations
@@ -184,7 +184,7 @@ INTERACTIVE_OUTPUT_SCHEMA: Dict[str, Any] = {
 
 class RAGToolset:
     """
-    Conjunto de tools MCP para búsquedas en el RAG y manejo de sesiones CLI.
+    MCP tool collection for RAG searches and CLI session management.
     """
     _rag_tools = {"dense_search", "lexical_search", "hybrid_search", "chunks_by_url"}
     _item_tools = {
@@ -568,7 +568,7 @@ class RAGToolset:
             enabled_set = {name for name in enabled_tools if name in all_tools}
             disabled = {name for name in all_tools.keys() if name not in enabled_set}
             if disabled:
-                logger.info("Tools MCP deshabilitadas por configuración: %s", ", ".join(sorted(disabled)))
+                logger.info("MCP tools disabled by configuration: %s", ", ".join(sorted(disabled)))
             self._tools = {name: all_tools[name] for name in sorted(enabled_set)}
         else:
             self._tools = all_tools
@@ -582,8 +582,8 @@ class RAGToolset:
         self._tools = {name: self._all_tools[name] for name in sorted(enabled_set)}
         disabled = set(self._all_tools.keys()) - enabled_set
         if disabled:
-            logger.info("Tools deshabilitadas: %s", ", ".join(sorted(disabled)))
-        logger.info("Tools habilitadas: %s", ", ".join(sorted(enabled_set)) or "(none)")
+            logger.info("Disabled tools: %s", ", ".join(sorted(disabled)))
+        logger.info("Enabled tools: %s", ", ".join(sorted(enabled_set)) or "(none)")
 
     def update_retriever(self, retriever) -> None:
         self.retriever = retriever
@@ -596,13 +596,13 @@ class RAGToolset:
 
     def _validate(self, schema: Dict[str, Any], payload: Dict[str, Any]) -> None:
         if not isinstance(payload, dict):
-            raise ValueError("Los argumentos de la tool deben ser un objeto.")
+            raise ValueError("Tool arguments must be an object.")
         validator = Draft202012Validator(schema)
         errors = sorted(validator.iter_errors(payload), key=lambda err: list(err.path))
         if errors:
             first = errors[0]
             path = ".".join(str(part) for part in first.path) or "(root)"
-            raise ValueError(f"Argumentos inválidos en {path}: {first.message}.")
+            raise ValueError(f"Invalid arguments at {path}: {first.message}.")
 
     def _build_python_command(self, payload: Dict[str, Any]) -> str:
         """Build and validate a Python-only command string.
@@ -616,7 +616,7 @@ class RAGToolset:
         mode = (payload.get("mode") or "").strip().lower()
         args_list = payload.get("args") or []
         if args_list and (not isinstance(args_list, list) or not all(isinstance(x, str) for x in args_list)):
-            raise ValueError("'args' debe ser una lista de cadenas.")
+            raise ValueError("'args' must be a list of strings.")
         pyopts = payload.get("python_opts") or {}
         unbuffered = bool(pyopts.get("unbuffered", True))
         python_bin = "python"
@@ -629,22 +629,22 @@ class RAGToolset:
         workdir_abs = (repo_root / workdir_arg).resolve()
         if not _is_under_root(workdir_abs, repo_root):
             raise ValueError(
-                f"Workdir fuera del repo. repo_root={repo_root} workdir_arg={workdir_arg} resolved={workdir_abs}"
+                f"Workdir outside repository. repo_root={repo_root} workdir_arg={workdir_arg} resolved={workdir_abs}"
             )
 
         if mode == "script":
             script_path = payload.get("script_path") or ""
             if not isinstance(script_path, str) or not script_path.strip():
-                raise ValueError("Debes indicar 'script_path' para mode='script'.")
+                raise ValueError("You must provide 'script_path' for mode='script'.")
             candidate = (workdir_abs / script_path).resolve()
-            # Denegar symlinks que escapan
+            # Deny escaping symlinks.
             if not _is_under_root(candidate, repo_root):
                 raise ValueError(
-                    f"Script fuera del repo. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
+                    f"Script outside repository. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
                 )
             if not candidate.is_file():
                 raise ValueError(
-                    f"Script no encontrado. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
+                    f"Script not found. repo_root={repo_root} workdir={workdir_abs} script_arg={script_path} resolved={candidate}"
                 )
             parts = [python_bin]
             if unbuffered:
@@ -657,10 +657,10 @@ class RAGToolset:
             mod = payload.get("module_name") or ""
             if not isinstance(mod, str) or not mod.strip():
                 raise ValueError(
-                    "Debes indicar 'module_name' para mode='module' o 'module_repl'."
+                    "You must provide 'module_name' for mode='module' or 'module_repl'."
                 )
             if not _re.fullmatch(r"[A-Za-z0-9_]+(\.[A-Za-z0-9_]+)*", mod):
-                raise ValueError("module_name inválido.")
+                raise ValueError("Invalid module_name.")
             parts = [python_bin]
             if unbuffered:
                 parts.append("-u")
@@ -670,21 +670,21 @@ class RAGToolset:
             parts.extend(args_list)
             return _quote_list(parts)
 
-        # Unsupported mode
+        # Unsupported mode.
         raise ValueError(
-            "Debes indicar 'mode' válido ('script', 'module' o 'module_repl') para Python."
+            "You must provide a valid Python 'mode' ('script', 'module', or 'module_repl')."
         )
 
     def call(self, name: str, payload: Dict[str, Any]) -> Any:
         if name not in self._tools:
-            logger.warning("Solicitud para tool desconocida: %s", name)
-            raise ValueError(f"Tool desconocida: {name}")
+            logger.warning("Request for unknown tool: %s", name)
+            raise ValueError(f"Unknown tool: {name}")
         tool = self._tools[name]
         if self.retriever is None and name in self._rag_tools:
-            raise ValueError("RAG no disponible: base de datos no inicializada.")
+            raise ValueError("RAG unavailable: database not initialized.")
         if name in self._item_tools and self.item_service is None:
-            raise ValueError("Servicio de items no disponible.")
-        logger.debug("Ejecutando tool '%s' con payload=%s", name, payload)
+            raise ValueError("Items service unavailable.")
+        logger.debug("Executing tool '%s' with payload=%s", name, payload)
         self._validate(tool["schema"], payload)
         try:
             if name == "dense_search":
@@ -696,7 +696,7 @@ class RAGToolset:
             elif name == "chunks_by_url":
                 results = self.retriever.chunks_for_url(payload["url"])
             elif name == "python_cli_start":
-                # Build a Python-only command from structured fields
+                # Build a Python-only command from structured fields.
                 command = self._build_python_command(payload)
                 high = bool(payload.get("high_scrollback", False))
                 ring_max = (2 * 1024 * 1024) if high else None
@@ -715,7 +715,7 @@ class RAGToolset:
                 # Prefer stdin_lines when provided; otherwise fall back to single text
                 stdin_lines = payload.get("stdin_lines")
                 if isinstance(stdin_lines, list) and stdin_lines:
-                    # Send multiple lines and then drain once
+                    # Send multiple lines and then drain once.
                     from utils.cli_sessions import send_lines as _send_lines
 
                     results = _send_lines(
@@ -840,14 +840,14 @@ class RAGToolset:
                 )
                 results = {"deleted": True}
             else:
-                raise ValueError(f"Tool no soportada: {name}")
-            logger.info("Tool '%s' ejecutada correctamente.", name)
+                raise ValueError(f"Unsupported tool: {name}")
+            logger.info("Tool '%s' executed successfully.", name)
             return results
         except ValueError as exc:
-            logger.warning("Error de validación en tool '%s': %s", name, exc)
+            logger.warning("Validation error in tool '%s': %s", name, exc)
             raise
         except Exception:
-            logger.exception("Error inesperado ejecutando tool '%s'", name)
+            logger.exception("Unexpected error while executing tool '%s'", name)
             raise
 
 

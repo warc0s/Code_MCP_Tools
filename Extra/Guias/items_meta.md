@@ -1,43 +1,46 @@
-# Meta por tipo (Memory/Docs/Bugs/Todos)
+# Meta By Type (Memory/Docs/Bugs/Todos)
 
-Esta guía detalla la estructura del campo `meta` para cada tipo de item, la validación y ejemplos prácticos.
+This guide describes the `meta` structure for each item type, validation rules, and practical examples.
 
-## Resumen
-- Validación: `meta` se valida con Pydantic por tipo, pero todos sus campos son opcionales (extras). Los campos obligatorios pasan a `typed` (por tipo), y se validan al crear y cuando aplica.
-- Tools MCP (`store_item`, `update_item`): exponen `meta` (opc) y `typed` (obligatorio por tipo) en su JSON Schema.
-- UI: la plantilla de `meta` se auto-aplica al cambiar subtabs; los campos `typed` se muestran como inputs dedicados por tipo.
+## Summary
 
-## Campos por tipo
-- memory (typed obligatorios)
+- Validation: `meta` is validated with Pydantic per type, but all of its fields are optional extras. Required fields moved to `typed` (per type), and are validated on creation and when applicable.
+- MCP tools (`store_item`, `update_item`): expose optional `meta` and per-type required `typed` in their JSON Schema.
+- UI: the `meta` template is auto-applied when switching subtabs; `typed` fields are shown as dedicated inputs per type.
+
+## Fields By Type
+
+- memory (required typed fields)
   - topic (str)
   - decision (str)
   - context (str)
   - rationale (str)
-  - related_links (list[str], opcional)
-- doc (typed opcionales)
+  - related_links (list[str], optional)
+- doc (optional typed fields)
   - authors (list[str])
   - related_docs (list[str])
-  - source_url, version_notes → `meta` (opcional)
-- bug (typed obligatorios)
+  - source_url, version_notes -> optional `meta`
+- bug (required typed fields)
   - severity: "high" | "medium" | "low"
-  - reproduction (str; pasos exactos)
+  - reproduction (str; exact steps)
   - expected (str)
   - root_cause (str)
-  - extras (meta, opcional): logs_excerpt, resolution_criteria (list), related_files (list), done_summary (resumen al resolver)
-- todo (typed obligatorios)
+  - extras (optional meta): logs_excerpt, resolution_criteria (list), related_files (list), done_summary (resolution summary)
+- todo (required typed fields)
   - kind: "bug_fix" | "refactor" | "feature" | "chore"
   - acceptance_criteria (list[str])
   - priority: "p0" | "p1" | "p2"
-  - extras (meta, opcional): reproduction, dependencies, related_files, done_summary
-  - done_summary (str, opcional; requerido al resolver, ≥120 chars)
+  - extras (optional meta): reproduction, dependencies, related_files, done_summary
+  - done_summary (str, optional; required when resolving, >=120 chars)
 
-## Ejemplos
+## Examples
 
-### BUG con logs
+### BUG With Logs
+
 ```json
 {
   "severity": "medium",
-  "reproduction": "Open Memory → Todo, drag card quickly",
+  "reproduction": "Open Memory -> Todo, drag card quickly",
   "expected": "Single update to target status without flicker",
   "root_cause": "DOM reflow under heavy drag events",
   "logs_excerpt": "Console shows duplicate drop event; network quiet; no 500s",
@@ -48,6 +51,7 @@ Esta guía detalla la estructura del campo `meta` para cada tipo de item, la val
 ```
 
 ### TODO
+
 ```json
 {
   "kind": "feature",
@@ -60,12 +64,14 @@ Esta guía detalla la estructura del campo `meta` para cada tipo de item, la val
 }
 ```
 
-## Reglas al resolver (enforcement)
-- Al cambiar el estado a `resolved`:
-  - bug/todo deben incluir `meta.done_summary` (≥120 caracteres) y al menos un elemento en `meta.related_files`.
-  - La UI muestra un modal para completar estos campos si faltan al mover una tarjeta a Resolved.
-  - El backend valida estos requisitos y devuelve error si no se cumplen.
+## Resolution Enforcement
 
-## Errores de validación (ejemplo)
-- `meta inválido para 'bug': faltan campos: reproduction, expected, root_cause; valores inválidos: severity: Input should be 'high' | 'medium' | 'low'.`
-- Solución: completa los campos faltantes y ajusta los valores a los permitidos.
+- When changing status to `resolved`:
+  - bug/todo must include `meta.done_summary` (>=120 chars) and at least one entry in `meta.related_files`.
+  - The UI shows a modal to complete those fields when they are missing while moving a card to Resolved.
+  - The backend validates these requirements and returns an error when they are not met.
+
+## Validation Errors (Example)
+
+- `invalid meta for 'bug': missing fields: reproduction, expected, root_cause; invalid values: severity: Input should be 'high' | 'medium' | 'low'.`
+- Fix: complete the missing fields and adjust values to the allowed set.

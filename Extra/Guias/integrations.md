@@ -1,9 +1,10 @@
-# Integraciones MCP con editores
+# MCP Integrations With Editors
 
-Esta guía resume cómo conectar este servidor MCP con herramientas de coding. También puedes usar la pestaña `Dashboard → Integrations` para copiar snippets con la URL actual de tu instancia.
+This guide summarizes how to connect this MCP server to coding tools. You can also use the `Dashboard -> Integrations` tab to copy snippets with the current URL of your instance.
 
 ## Codex CLI
-- Edita `~/.codex/config.toml` y pega:
+
+Edit `~/.codex/config.toml` and paste:
 
 ```toml
 rmcp_client = true
@@ -14,25 +15,27 @@ startup_timeout_sec = 2
 tool_timeout_sec = 60
 ```
 
-Ajusta `url` y timeouts según tu entorno.
+Adjust `url` and timeouts for your environment.
 
 ## Claude Code
-Añade el servidor MCP HTTP:
+
+Add the HTTP MCP server:
 
 ```bash
 claude mcp add --transport http contextarium http://127.0.0.1:8000/mcp
 ```
 
-Verifica con:
+Verify with:
 
 ```bash
 claude mcp list
 ```
 
-Puedes cambiar el `name` y `--scope user|project|local`.
+You can change the `name` and `--scope user|project|local`.
 
 ## GitHub Copilot (VS Code)
-Configura el servidor vía archivo del proyecto:
+
+Configure the server through a project file:
 
 ```json
 {
@@ -45,4 +48,4 @@ Configura el servidor vía archivo del proyecto:
 }
 ```
 
-Guarda como `.vscode/mcp.json` y usa “MCP: List Servers” en la paleta de comandos para verificar.
+Save it as `.vscode/mcp.json` and use “MCP: List Servers” from the Command Palette to verify it.

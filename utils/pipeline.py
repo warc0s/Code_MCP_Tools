@@ -1,5 +1,5 @@
 """
-Pipeline de ingesta que construye la base de datos RAG a partir de distintas fuentes.
+Ingestion pipeline that builds the RAG database from different sources.
 """
 
 from __future__ import annotations
@@ -90,9 +90,9 @@ def _rebuild_rag_from_crawled_documents(
 ) -> IngestionSummary:
     crawled_docs = list(crawled_docs)
     if not crawled_docs:
-        raise RuntimeError("No se recuperaron páginas para la ingesta.")
+        raise RuntimeError("No pages were recovered for ingestion.")
 
-    print(f"Documentos crawlerados: {len(crawled_docs)}")
+    print(f"Crawled documents: {len(crawled_docs)}")
     if progress_cb:
         progress_cb({"stage": "chunking", "documents": len(crawled_docs)})
 
@@ -131,9 +131,9 @@ def _rebuild_rag_from_crawled_documents(
             )
 
     if not chunk_payload:
-        raise RuntimeError("No se generaron chunks tras el proceso de chunking.")
+        raise RuntimeError("No chunks were generated after chunking.")
 
-    print(f"Chunks únicos listos para embebido: {len(chunk_payload)}")
+    print(f"Unique chunks ready for embedding: {len(chunk_payload)}")
     if progress_cb:
         progress_cb(
             {
@@ -153,7 +153,7 @@ def _rebuild_rag_from_crawled_documents(
             batch = texts[start : start + batch_size]
             batch_vectors = embedder.embed_documents(batch)
             if len(batch_vectors) != len(batch):
-                raise RuntimeError("El proveedor de embeddings devolvió un lote con longitud inesperada.")
+                raise RuntimeError("The embedding provider returned a batch with an unexpected length.")
             embeddings.extend(batch_vectors)
             progress.update(len(batch_vectors))
             if progress_cb:
@@ -168,11 +168,11 @@ def _rebuild_rag_from_crawled_documents(
                 )
 
     if len(embeddings) != len(chunk_payload):
-        raise RuntimeError("Faltan vectores de embeddings para completar la ingesta.")
+        raise RuntimeError("Missing embedding vectors to complete ingestion.")
 
     embedding_dim = embedder.embedding_dim
 
-    print("Embeddings generados. Inicializando base de datos DuckDB...")
+    print("Embeddings generated. Initializing DuckDB database...")
     if progress_cb:
         progress_cb(
             {
@@ -193,7 +193,7 @@ def _rebuild_rag_from_crawled_documents(
         manager.reset()
         manager.initialize_schema()
 
-        print("Insertando documentos y chunks en DuckDB...")
+        print("Inserting documents and chunks into DuckDB...")
         if progress_cb:
             progress_cb(
                 {
@@ -224,7 +224,7 @@ def _rebuild_rag_from_crawled_documents(
 
         manager.insert_documents(doc_rows)
         manager.insert_chunks(chunk_rows)
-        # Crear índices pesados tras la carga para evitar mantenimiento incremental por fila
+        # Create heavy indexes after load to avoid incremental per-row maintenance.
         manager.create_indexes()
         if progress_cb:
             progress_cb(

@@ -1,5 +1,5 @@
 """
-Utilidades para configurar rutas de caché local de modelos.
+Utilities for configuring local model cache paths.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ _CACHE_INITIALIZED = False
 
 def configure_model_cache(directory: Path | str = Path(".cache/models")) -> Path:
     """
-    Configura las variables de entorno para que HuggingFace y SentenceTransformers
-    utilicen un directorio de caché local dentro del proyecto.
+    Configure environment variables so HuggingFace and SentenceTransformers use
+    a local cache directory inside the project.
     """
     global _CACHE_INITIALIZED
 

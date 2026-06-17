@@ -13,7 +13,7 @@ def test_nccl_missing_produces_cpu_hint(monkeypatch):
     provider = EmbeddingProvider(EmbeddingConfig(), mode="local")
 
     def fake_loader():
-        # Simula un fallo típico al importar torch con build CUDA sin NCCL
+        # Simulate a typical torch import failure with CUDA build missing NCCL.
         raise ImportError("libnccl.so.2: cannot open shared object file: No such file or directory")
 
     monkeypatch.setattr(provider, "_load_sentence_transformer", fake_loader)
@@ -41,7 +41,7 @@ def test_torchvision_mismatch_hint(monkeypatch):
 
 
 def test_device_auto_cuda_selection(monkeypatch):
-    # Evita descargar modelos reales: stub de SentenceTransformer
+    # Avoid downloading real models: SentenceTransformer stub.
     class FakeST:
         def __init__(self, model_name, device=None, **kwargs):
             self.model_name = model_name
@@ -57,11 +57,11 @@ def test_device_auto_cuda_selection(monkeypatch):
 
     provider = EmbeddingProvider(EmbeddingConfig(), mode="local")
 
-    # Forzamos que "haya" CUDA disponible sin importar torch real
+    # Force CUDA availability regardless of the real torch installation.
     monkeypatch.setattr("utils.embeddings.EmbeddingProvider._load_sentence_transformer", lambda self: FakeST)
     monkeypatch.setattr("utils.embeddings.__builtins__", __builtins__)  # safeguard
 
-    # Parcheamos la verificación a través de un stub simple: simulamos torch cuda available
+    # Patch verification through a simple stub: simulate torch cuda availability.
     class _Cuda:
         @staticmethod
         def is_available():

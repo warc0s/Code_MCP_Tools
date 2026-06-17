@@ -8,8 +8,8 @@ def test_rag_guide_describes_current_server_flow():
 
     assert "POST /ui/api/rebuild/sitemap" in content
     assert "POST /ui/api/rebuild/url-file" in content
-    assert "opción 1." not in content
-    assert "opción 2" not in content
+    assert "option 1." not in content.lower()
+    assert "option 2" not in content.lower()
 
 
 def test_tools_summary_mentions_python_call_function():

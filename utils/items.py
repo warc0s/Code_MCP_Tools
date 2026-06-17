@@ -1,5 +1,5 @@
 """
-Gestión de proyectos e items (memory/doc/bug/todo) sobre SQLite (memoria).
+Project and item (memory/doc/bug/todo) management over SQLite memory storage.
 """
 
 from __future__ import annotations
@@ -220,9 +220,9 @@ class ItemService:
             return new_id, slug, name
 
     def create_project(self, slug_or_name: str, name: Optional[str] = None) -> dict[str, Any]:
-        """Crea un proyecto vacío si no existe y devuelve sus datos.
+        """Create an empty project if missing and return its data.
 
-        Si ya existe, devuelve la info existente (id/slug/name/created_at, items_count).
+        If it already exists, return existing info (id/slug/name/created_at, items_count).
         """
         slug = normalize_project_slug(slug_or_name or "")
         with self._connect() as conn:
@@ -528,7 +528,7 @@ class ItemService:
         if not row:
             raise ValueError("Item not found for the specified project.")
         record = self._row_to_item(row)
-        # Garantiza que devolvemos el slug actualizado
+        # Ensure the updated slug is returned.
         record.project_slug = project_slug
         record.project_name = project_name
         return record
