@@ -1,0 +1,63 @@
+main:
+  mode: local
+database:
+  path: data/rag.duckdb
+memory_database:
+  path: data/memory.sqlite3
+crawling:
+  workers: 1
+  pattern: '*'
+  max_urls: -1
+  cache_mode: disabled
+  text_mode: false
+  enable_stealth: false
+  word_count_threshold: 5
+  excluded_tags:
+  - nav
+  - footer
+  - aside
+  - form
+  pruning_threshold: 0.2
+  pruning_min_word_threshold: 5
+  min_markdown_chars: 25
+chunking:
+  max_tokens: 420
+  overlap_tokens: 80
+  min_chunk_tokens: 120
+  preserve_code_blocks: true
+  respect_headings: true
+embeddings:
+  model_name: voyageai/voyage-4-nano
+  cloud_model_name: text-embedding-3-small
+  normalize_embeddings: true
+  query_prompt_name: query
+  batch_size: 16
+retrieval:
+  dense_topk: 24
+  lexical_topk: 24
+  hybrid_alpha: 0.5
+  mmr_lambda: 0.5
+  same_url_penalty: 0.08
+  final_k: 8
+  force_english_queries: true
+  rerank_topk: 12
+  enable_rerank: true
+reranker:
+  model_name: Qwen/Qwen3-Reranker-0.6B
+  cloud_model_name: Qwen/Qwen3-Reranker-4B
+  max_length: 8192
+mcp:
+  tools:
+    store_item: true
+    update_item: true
+    get_item: true
+    list_items: true
+    search_items: true
+    patch_doc: true
+    delete_item: true
+    chunks_by_url: true
+    hybrid_search: true
+    dense_search: false
+    lexical_search: false
+ui:
+  selected_project: null

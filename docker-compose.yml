@@ -1,0 +1,15 @@
+services:
+  contextarium:
+    image: contextarium-tools:latest
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./.cache:/app/.cache
+      - ./txt:/app/txt
+      - ./config.yaml:/app/config.yaml
+    environment:
+      - CONTAINER_NAME=contextarium-tools
+      - APP_HOST=0.0.0.0
+    restart: unless-stopped

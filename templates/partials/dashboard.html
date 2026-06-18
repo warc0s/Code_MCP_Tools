@@ -1,0 +1,219 @@
+<!-- DASHBOARD TAB -->
+      <div id="tab-dashboard" class="tab-content">
+        <!-- Sub-navigation for Dashboard sections -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px; padding: 8px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-primary);">
+          <button class="tab-btn active" data-subtab="dashboard-status">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Status
+          </button>
+          <button class="tab-btn" data-subtab="dashboard-integrations">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 010 5.656l-1 1a4 4 0 01-5.656-5.656l1-1M10.172 13.828a4 4 0 010-5.656l1-1a4 4 0 015.656 5.656l-1 1" />
+            </svg>
+            Integrations
+          </button>
+          <button class="tab-btn" data-subtab="dashboard-guidelines">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            AGENTS.md
+          </button>
+        </div>
+
+        <!-- Dashboard Status Section -->
+        <div id="subtab-dashboard-status" class="subtab-content active">
+          <div class="card">
+            <div class="card-title">System Status</div>
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 14px;">
+              Live read from the backend: active mode/models, current document count, and last indexed URLs. Data reflects the live DB and config; use the refresh button to requery the server.
+              <br/>
+              <strong style="color: var(--text-secondary);">Scope:</strong> Docs count (RAG) is global; Memory counters depend on the selected project.
+            </p>
+            <div style="display: flex; flex-direction: column; gap: 0;">
+              <div class="stat-row">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Mode</span>
+                <span id="mode" style="font-size: 13px; color: var(--text-primary); font-weight: 500;">-</span>
+              </div>
+              <div class="stat-row">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Embeddings</span>
+                <span id="embedding" style="font-size: 12px; color: var(--text-secondary); font-family: 'SF Mono', Monaco, monospace;">-</span>
+              </div>
+              <div class="stat-row">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Reranker</span>
+                <span id="reranker" style="font-size: 12px; color: var(--text-secondary); font-family: 'SF Mono', Monaco, monospace;">-</span>
+              </div>
+              <div class="stat-row">
+                <span style="font-size: 12px; color: var(--text-tertiary);">Documents</span>
+                <span id="docs-count" style="font-size: 18px; color: var(--text-primary); font-weight: 600;">-</span>
+              </div>
+              
+            </div>
+            <div style="margin-top: 20px; padding: 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+              <div style="font-size: 11px; color: var(--text-tertiary); font-weight: 500; margin-bottom: 8px;">RECENT URLs</div>
+              <ul id="sample-urls-dashboard" style="display: flex; flex-direction: column; gap: 4px; max-height: 120px; overflow-y: auto; font-size: 12px; color: var(--text-secondary);"></ul>
+            </div>
+            <div style="margin-top: 12px; padding: 8px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px;">
+              <div style="font-size: 10px; color: var(--text-quaternary); margin-bottom: 2px;">MCP URL</div>
+              <code id="mcp-path-dashboard" style="font-size: 11px; color: var(--text-secondary); font-family: 'SF Mono', Monaco, monospace;">-</code>
+            </div>
+            
+            <div style="margin-top: 12px; padding: 10px 12px; background: rgba(217, 119, 6, 0.1); border: 1px solid rgba(217, 119, 6, 0.3); border-radius: 6px; font-size: 12px; color: #d97706; font-weight: 500;" id="needs-rebuild-dashboard" class="hidden">
+              Config changed; rebuild the index to apply changes
+            </div>
+            <div style="margin-top: 16px;">
+              <button class="ghost-btn" style="width: 100%;" onclick="refreshDashboardStatus()">
+                <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Refresh
+              </button>
+            </div>
+          </div>
+          <div style="margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 380px), 1fr)); gap: 16px;">
+            <!-- Tools Card (grouped) -->
+            <div class="card">
+              <div class="card-title">Tools</div>
+              <div id="runtime-tools-grouped" style="display: flex; flex-direction: column; gap: 10px;"></div>
+            </div>
+            <!-- Memory Card -->
+            <div class="card">
+              <div class="card-title">Memory</div>
+              <div class="stat-row"><span style="font-size: 12px; color: var(--text-tertiary);">Selected project</span><span id="selected-project" style="font-size: 13px; color: var(--text-primary); font-weight: 500;">-</span></div>
+              <div class="stat-row"><span style="font-size: 12px; color: var(--text-tertiary);">Items (total)</span><span id="items-total" style="font-size: 13px; color: var(--text-primary); font-weight: 600;">-</span></div>
+              <div class="stat-row"><span style="font-size: 12px; color: var(--text-tertiary);">Items by type</span><span id="items-by-type" style="font-size: 12px; color: var(--text-secondary); font-family: 'SF Mono', Monaco, monospace;">-</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Dashboard Guidelines Section -->
+        <div id="subtab-dashboard-guidelines" class="subtab-content hidden">
+          <div class="card" style="margin-bottom: 16px;">
+            <div class="card-title">Guidelines: Info</div>
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+              Use these reminders to tailor your AGENTS.md before copying. Remove sections that do not apply to your setup.
+            </p>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px;">
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Context7 MCP</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If you do not use Context7, remove that section from the AGENTS.md copy.</div>
+              </div>
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Chrome DevTools (MCP)</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If browser automation is not part of your setup, remove that integration note from the AGENTS.md copy.</div>
+              </div>
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Project name</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">Remember to include the configured project name so Memory counters align with selection.</div>
+              </div>
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">RAG ingestion/index</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If you do not use RAG, remove ingestion/rebuild/docs sections from the AGENTS.md copy.</div>
+              </div>
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Items & Memory</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If you do not use Items/Memory, remove those sections; otherwise include the selected project semantics.</div>
+              </div>
+              <div style="padding: 10px; border: 1px solid var(--border-secondary); border-radius: 8px; background: var(--bg-tertiary);">
+                <div style="font-size: 13px; color: var(--text-primary); font-weight: 600; margin-bottom: 4px;">Security Scope</div>
+                <div style="font-size: 12px; color: var(--text-tertiary);">If your project is not local-only, add authentication and network rules before sharing the MCP URL.</div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">AGENTS.md</div>
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+              The panel fetches operating guidelines via `/ui/api/guidelines` (prefers `templates/AGENTS.txt`, falls back to `AGENTS.md`). Use it to keep the agent rules in sync with the backend serving this instance.
+            </p>
+            <div style="margin-bottom: 16px;">
+              <button class="ghost-btn" onclick="copyGuidelines()" style="width: 100%;">
+                <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy to Clipboard
+              </button>
+            </div>
+            <textarea id="guidelines-content" class="input" readonly style="height: 500px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; resize: vertical; white-space: pre-wrap;" placeholder="Loading guidelines..."></textarea>
+          </div>
+        </div>
+
+        <!-- Dashboard Integrations Section -->
+        <div id="subtab-dashboard-integrations" class="subtab-content hidden">
+          <div class="card">
+            <div class="card-title">Integrations</div>
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+              Use these instructions to plug this MCP server into coding tools like Codex CLI and Claude Code.
+            </p>
+            <div style="margin-bottom: 16px; padding: 10px 12px; background: var(--bg-tertiary); border: 1px solid var(--border-secondary); border-radius: 6px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+              <div style="font-size: 11px; color: var(--text-tertiary); font-weight: 600;">Current MCP URL</div>
+              <code id="integrations-current-url" style="font-size: 12px; color: var(--text-secondary);">-</code>
+              <button class="ghost-btn" onclick="copyIntegrationsUrl()">Copy URL</button>
+              <button class="ghost-btn" onclick="refreshIntegrations()">Refresh</button>
+            </div>
+            <div class="integrations-grid">
+              <div class="card">
+                <div class="card-title">Codex CLI</div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 6px;">Step 1</div>
+                <div style="margin-bottom: 8px; font-size: 13px; color: var(--text-secondary);">Open your Codex config file:</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                  <code style="font-size:12px; color: var(--text-secondary);">nano ~/.codex/config.toml</code>
+                  <button class="ghost-btn" onclick="copyCodexCommand()">Copy</button>
+                </div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin: 12px 0 6px;">Step 2</div>
+                <div style="margin-bottom: 6px; font-size: 13px; color: var(--text-secondary);">Paste this content (adjust <code>url</code>, <code>startup_timeout_sec</code> and <code>tool_timeout_sec</code> as needed):</div>
+                <textarea id="codex-config-snippet" class="input" readonly style="margin-top: 8px; height: 160px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">
+rmcp_client = true
+
+[mcp_servers.contextarium_local]
+url = "http://127.0.0.1:8000/mcp"
+startup_timeout_sec = 2
+tool_timeout_sec = 60
+                </textarea>
+                <div style="margin-top: 8px; display:flex; gap:8px;">
+                  <button class="ghost-btn" onclick="copyCodexConfig()">Copy snippet</button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-title">Claude Code</div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 6px;">Step 1</div>
+                <div style="margin-bottom: 6px; font-size: 13px; color: var(--text-secondary);">Add this MCP server as HTTP:</div>
+                <textarea id="claude-add-cmd" class="input" readonly style="margin-top: 4px; height: 80px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">claude mcp add --transport http contextarium http://127.0.0.1:8000/mcp</textarea>
+                <div style="margin-top: 8px; display:flex; gap:8px; flex-wrap: wrap;">
+                  <button class="ghost-btn" onclick="copyClaudeCommand()">Copy command</button>
+                </div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing:0.05em; color: var(--text-tertiary); margin: 12px 0 6px;">Step 2</div>
+                <div style="font-size: 13px; color: var(--text-secondary);">Optionally verify the server exists:</div>
+                <div style="display:flex; gap:8px; align-items:center; margin-top: 6px;">
+                  <code style="font-size:12px; color: var(--text-secondary);">claude mcp list</code>
+                  <button class="ghost-btn" onclick="copyClaudeVerify()">Copy</button>
+                </div>
+                <p style="font-size: 12px; color: var(--text-tertiary); margin-top: 10px;">
+                  You can change the server <code>name</code> and <code>url</code>. Optional: use <code>--scope user|project|local</code>.
+                </p>
+              </div>
+              <div class="card">
+                <div class="card-title">GitHub Copilot (VS Code)</div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-tertiary); margin-bottom: 6px;">Step 1</div>
+                <div style="margin-bottom: 6px; font-size: 13px; color: var(--text-secondary);">Create <code>.vscode/mcp.json</code> in your project and paste:</div>
+                <textarea id="copilot-mcp-json" class="input" readonly style="margin-top: 4px; height: 160px; font-family: 'SF Mono', Monaco, monospace; font-size: 12px; white-space: pre;">{
+  "servers": {
+    "contextarium": {
+      "type": "http",
+      "url": "http://127.0.0.1:8000/mcp"
+    }
+  }
+}</textarea>
+                <div style="margin-top: 8px; display:flex; gap:8px; flex-wrap: wrap;">
+                  <button class="ghost-btn" onclick="copyCopilotJson()">Copy JSON</button>
+                </div>
+                <div style="font-size:11px; text-transform: uppercase; letter-spacing:0.05em; color: var(--text-tertiary); margin: 12px 0 6px;">Step 2</div>
+                <div style="font-size: 13px; color: var(--text-secondary);">In VS Code, run <code>MCP: List Servers</code> from the Command Palette to verify it appears.</div>
+                <p style="font-size: 12px; color: var(--text-tertiary); margin-top: 10px;">
+                  You can also use the GitHub MCP Registry (preview) to add servers from a curated list.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>

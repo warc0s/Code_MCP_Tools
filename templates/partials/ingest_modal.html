@@ -1,0 +1,29 @@
+<!-- Ingestion Summary Modal -->
+<div id="ingest-modal" class="hidden" style="position: fixed; inset: 0; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; backdrop-filter: blur(2px);">
+  <div onclick="event.stopPropagation()" style="width: min(520px, 92%); background: var(--bg-primary); border: 1px solid var(--border-primary); border-radius: 8px; padding: 24px; box-shadow: 0 20px 60px rgba(0,0,0,0.5); position: relative; z-index: 1;">
+    <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 20px; display: flex; align-items: center; gap: 8px;">
+      <svg style="width: 18px; height: 18px; color: #10b981;" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      Index completed
+    </div>
+    <div style="font-size: 13px; color: var(--text-secondary); margin-bottom: 20px;">
+      Your RAG index has been rebuilt successfully. Here is a quick summary:
+    </div>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px;">
+      <div style="padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; text-align: center; transition: all 0.2s ease;">
+        <div style="font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Documents</div>
+        <div id="ingest-documents-count" style="font-size: 24px; font-weight: 700; color: var(--text-primary);">0</div>
+      </div>
+      <div style="padding: 16px; background: var(--bg-secondary); border: 1px solid var(--border-primary); border-radius: 6px; text-align: center; transition: all 0.2s ease;">
+        <div style="font-size: 11px; color: var(--text-tertiary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px;">Chunks</div>
+        <div id="ingest-chunks-count" style="font-size: 24px; font-weight: 700; color: var(--text-primary);">0</div>
+      </div>
+    </div>
+    <div style="display: flex; gap: 8px; justify-content: flex-end;">
+      <button class="ghost-btn" onclick="hideIngestSummaryModal()">Close</button>
+      <button class="primary-btn" onclick="gotoRagDocs(); hideIngestSummaryModal();">View documents</button>
+    </div>
+  </div>
+  <div tabindex="0" onclick="hideIngestSummaryModal()" style="position: absolute; inset: 0; z-index: 0; cursor: pointer;"></div>
+</div>

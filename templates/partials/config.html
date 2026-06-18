@@ -1,0 +1,72 @@
+<!-- CONFIGURATION TAB -->
+      <div id="tab-config" class="tab-content hidden">
+        <!-- Sub-navigation for Configuration sections -->
+        <div style="display: flex; gap: 8px; margin-bottom: 24px; padding: 8px; background: var(--bg-secondary); border-radius: 8px; border: 1px solid var(--border-primary);">
+          <button class="tab-btn" data-subtab="config-tools">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+            Tools
+          </button>
+          <button class="tab-btn active" data-subtab="config-settings">
+            <svg class="icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            Settings
+          </button>
+        </div>
+
+        <!-- Config Tools Section -->
+        <div id="subtab-config-tools" class="subtab-content hidden">
+          <div class="card">
+            <div class="card-title">MCP Tools Management</div>
+            <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+              Check/uncheck tools and press Save to write the selection into <code style="color: var(--text-secondary);">config.yaml</code>. Changes do not hot-apply; restart the MCP server to load the updated list. Until then, the runtime keeps the previous tools.
+            </p>
+            <div id="tools-groups" style="display: flex; flex-direction: column; gap: 12px;"></div>
+            <div style="margin-top: 20px; padding: 10px 12px; background: rgba(59, 130, 246, 0.08); border: 1px solid rgba(59, 130, 246, 0.2); border-radius: 6px;">
+              <p style="font-size: 11px; color: #3b82f6;">
+                Saved config persists to disk. Click Restart MCP to reload the process with the new tool set. Active clients must call <code style="color: var(--text-secondary);">tools/list</code> again after restart.
+              </p>
+            </div>
+            <div id="tools-restart-banner" class="status-badge hidden" style="margin-top: 12px; background: rgba(217, 119, 6, 0.15); color: #d97706; border: 1px solid rgba(217, 119, 6, 0.3);">
+              <svg class="icon-sm" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12c0 4.97-4.03 9-9 9-1.12 0-2.19-.2-3.18-.57l-4.82 1.06 1.06-4.82C4.2 14.19 4 13.12 4 12c0-4.97 4.03-9 9-9s9 4.03 9 9z" />
+              </svg>
+              Saved to config.yaml. Restart MCP to apply changes.
+            </div>
+            <div style="display: flex; gap: 8px; margin-top: 20px;">
+              <button class="primary-btn" style="flex: 1;" onclick="saveTools()">Save</button>
+              <button class="ghost-btn" onclick="refreshTools()">Reset</button>
+              <button class="ghost-btn" onclick="restartMcp(event)" title="Gracefully restart the MCP server">Restart MCP</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Config Settings Section -->
+        <div id="subtab-config-settings" class="subtab-content active">
+          <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 12px;">
+            Select the active project. Saving will create the project if missing and set it as active.
+          </p>
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 400px), 1fr)); gap: 16px;">
+            <div class="card">
+              <div class="card-title">Project selection</div>
+              <p style="font-size: 12px; color: var(--text-tertiary); margin-bottom: 10px;">
+                Saving will create the project if missing and set it as active.
+              </p>
+              <label class="label" for="config-project">Project slug</label>
+              <input id="config-project" class="input" placeholder="e.g. my-project" />
+              <div id="project-slug-status" style="margin-top: 6px; font-size: 12px; color: var(--text-tertiary);"></div>
+              <div style="display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap;">
+                <button class="primary-btn" style="flex: 1;" onclick="saveSelectedProject(event)">Save and set project</button>
+                <button class="ghost-btn" onclick="refreshProjects(event)">Refresh list</button>
+              </div>
+              <div style="margin-top: 12px; max-height: 220px; overflow: auto; border: 1px solid var(--border-secondary); border-radius: 6px; padding: 8px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-tertiary); letter-spacing: 0.05em; margin-bottom: 6px;">Projects</div>
+                <ul id="projects-list" style="list-style: none; display: flex; flex-direction: column; gap: 6px;"></ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>

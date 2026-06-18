@@ -1,0 +1,13 @@
+crawl4ai
+tqdm
+duckdb
+PyYAML
+sentence-transformers
+fastapi
+uvicorn
+torch==2.4.1
+openai
+requests
+jinja2
+transformers
+jsonschema

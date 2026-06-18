@@ -1,0 +1,6 @@
+# Example URL file for RAG ingestion.
+# Lines starting with # are ignored.
+# Replace these placeholders with documentation URLs you are allowed to crawl.
+
+# https://example.com/docs/getting-started
+# https://example.com/docs/reference
